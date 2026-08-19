@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import AiStatusBadge from './AiStatusBadge.jsx'
 import { getProblemsForCourse } from '../data/demoProblems.js'
 import { generateQuestion } from '../services/tutorApi.js'
 import { isAnswerCorrect } from '../utils/answerChecking.js'
@@ -7,7 +8,98 @@ function masteryFor(course, completedSkillIds = []) {
   return Math.round((completedSkillIds.length / course.skills.length) * 100)
 }
 
-function PracticeSession({ course, courseProgress, onExit, onProgress }) {
+function SessionComplete({
+  course,
+  courseProgress,
+  problems,
+  sessionStart,
+  onChooseCourse,
+  onPracticeAgain,
+}) {
+  const attempts = Math.max(0, courseProgress.attempts - sessionStart.attempts)
+  const correct = Math.max(0, courseProgress.correct - sessionStart.correct)
+  const accuracy = attempts > 0 ? Math.round((correct / attempts) * 100) : 0
+  const startingSkills = new Set(sessionStart.completedSkillIds)
+  const sessionProblems = problems.slice(sessionStart.startIndex)
+  const practicedSkillIds = [...new Set(sessionProblems.map((problem) => problem.skillId))]
+  const newSkillCount = courseProgress.completedSkillIds.filter((id) => !startingSkills.has(id)).length
+  const mastery = masteryFor(course, courseProgress.completedSkillIds)
+  const usedAi = sessionProblems.some((problem) => problem.source === 'ai')
+
+  return (
+    <main className="completion-layout">
+      <section className="completion-card" aria-labelledby="completion-title">
+        <div className="completion-burst" aria-hidden="true">
+          <span>+</span><span>×</span><span>∿</span><span>+</span>
+          <strong>✓</strong>
+        </div>
+        <p className="completion-card__eyebrow">Session complete</p>
+        <h1 id="completion-title">You moved your {course.name} path forward.</h1>
+        <p className="completion-card__lede">
+          Your progress is saved on this device and ready for the next practice session.
+        </p>
+
+        <div className="completion-stats" aria-label="Session results">
+          <div>
+            <strong>{accuracy}%</strong>
+            <span>accuracy</span>
+          </div>
+          <div>
+            <strong>{newSkillCount}</strong>
+            <span>new skills</span>
+          </div>
+          <div>
+            <strong>{mastery}%</strong>
+            <span>course mastery</span>
+          </div>
+        </div>
+
+        <div className="completion-skills">
+          <div className="completion-skills__heading">
+            <strong>Skills practiced</strong>
+            <span>{usedAi ? 'Seeded + AI questions' : 'Reliable seeded questions'}</span>
+          </div>
+          <ul>
+            {practicedSkillIds.map((skillId) => {
+              const skill = course.skills.find((item) => item.id === skillId)
+              const isNew = !startingSkills.has(skillId)
+
+              return (
+                <li key={skillId}>
+                  <span aria-hidden="true">✓</span>
+                  <div>
+                    <strong>{skill?.name}</strong>
+                    <small>{isNew ? 'Newly mastered' : 'Mastery reinforced'}</small>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+
+        <div className="completion-actions">
+          <button className="primary-button" type="button" onClick={onPracticeAgain}>
+            Practice again
+            <span aria-hidden="true">↻</span>
+          </button>
+          <button className="secondary-button" type="button" onClick={onChooseCourse}>
+            Choose another course
+          </button>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function PracticeSession({
+  course,
+  courseProgress,
+  aiStatus,
+  onAiStatusChange,
+  onChooseCourse,
+  onExit,
+  onProgress,
+}) {
   const seededProblems = getProblemsForCourse(course.id)
   const savedIndex = Math.min(courseProgress.nextProblemIndex ?? 0, seededProblems.length - 1)
   const [problems, setProblems] = useState(seededProblems)
@@ -17,6 +109,13 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
   const [result, setResult] = useState(null)
   const [recentMistakes, setRecentMistakes] = useState([])
   const [generationState, setGenerationState] = useState({ status: 'idle', message: '' })
+  const [sessionComplete, setSessionComplete] = useState(false)
+  const [sessionStart, setSessionStart] = useState(() => ({
+    attempts: courseProgress.attempts,
+    correct: courseProgress.correct,
+    completedSkillIds: [...courseProgress.completedSkillIds],
+    startIndex: savedIndex,
+  }))
 
   const problem = problems[currentIndex]
   const skill = course.skills.find((item) => item.id === problem.skillId)
@@ -100,10 +199,19 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
         status: 'success',
         message: 'Your next question was generated for this exact skill and level.',
       })
+      onAiStatusChange({
+        state: 'connected',
+        model: aiStatus?.model,
+        message: 'Fresh AI questions are available.',
+      })
     } catch {
       setGenerationState({
         status: 'fallback',
-        message: 'A fresh question was unavailable, so your saved fallback is ready.',
+        message: 'Using a saved question so your practice keeps moving.',
+      })
+      onAiStatusChange({
+        state: 'fallback',
+        message: 'Saved questions are active.',
       })
     }
   }
@@ -114,7 +222,8 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
 
   function moveForward() {
     if (isLastProblem) {
-      onExit()
+      setSessionComplete(true)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
 
@@ -123,6 +232,24 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
     setHintIndex(-1)
     setResult(null)
     setGenerationState({ status: 'idle', message: '' })
+  }
+
+  function practiceAgain() {
+    setSessionStart({
+      attempts: courseProgress.attempts,
+      correct: courseProgress.correct,
+      completedSkillIds: [...courseProgress.completedSkillIds],
+      startIndex: 0,
+    })
+    setProblems(seededProblems)
+    setCurrentIndex(0)
+    setAnswer('')
+    setHintIndex(-1)
+    setResult(null)
+    setRecentMistakes([])
+    setGenerationState({ status: 'idle', message: '' })
+    setSessionComplete(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function updateAnswer(event) {
@@ -140,13 +267,24 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
           <span>SolvePath</span>
         </button>
         <span className="practice-header__course">{course.name}</span>
+        <AiStatusBadge status={aiStatus} />
         <button className="back-button" type="button" onClick={onExit}>
           <span aria-hidden="true">←</span>
           Back to courses
         </button>
       </header>
 
-      <main className="practice-layout">
+      {sessionComplete ? (
+        <SessionComplete
+          course={course}
+          courseProgress={courseProgress}
+          problems={problems}
+          sessionStart={sessionStart}
+          onChooseCourse={onChooseCourse}
+          onPracticeAgain={practiceAgain}
+        />
+      ) : (
+        <main className="practice-layout">
         <section className="practice-workspace" aria-labelledby="practice-question">
           <div className="practice-context">
             <div>
@@ -293,7 +431,8 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
             ))}
           </ol>
         </aside>
-      </main>
+        </main>
+      )}
     </div>
   )
 }

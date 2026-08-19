@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import AiStatusBadge from './components/AiStatusBadge.jsx'
 import CourseCard from './components/CourseCard.jsx'
 import PracticeSession from './components/PracticeSession.jsx'
 import SkillLadder from './components/SkillLadder.jsx'
 import { getCourseById, mathCourses } from './data/mathCurriculum.js'
+import { getTutorStatus } from './services/tutorApi.js'
 import './App.css'
 
 const SELECTED_COURSE_KEY = 'solvepath:selected-course'
@@ -36,6 +38,8 @@ function App() {
   const [selectedCourseId, setSelectedCourseId] = useState(getInitialCourseId)
   const [progressByCourse, setProgressByCourse] = useState(getInitialProgress)
   const [isPracticing, setIsPracticing] = useState(false)
+  const [aiStatus, setAiStatus] = useState({ state: 'checking', message: 'Checking AI availability.' })
+  const [resetComplete, setResetComplete] = useState(false)
   const selectedCourse = getCourseById(selectedCourseId)
   const selectedProgress = {
     ...EMPTY_PROGRESS,
@@ -53,8 +57,23 @@ function App() {
     }
   }, [progressByCourse])
 
+  useEffect(() => {
+    let isCurrent = true
+
+    void getTutorStatus().then((status) => {
+      if (isCurrent) {
+        setAiStatus(status)
+      }
+    })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [])
+
   function selectCourse(courseId) {
     setSelectedCourseId(courseId)
+    setResetComplete(false)
 
     try {
       window.localStorage.setItem(SELECTED_COURSE_KEY, courseId)
@@ -82,12 +101,41 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  function chooseAnotherCourse() {
+    setIsPracticing(false)
+    window.requestAnimationFrame(() => {
+      document.querySelector('#course-catalog')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
+  }
+
+  function resetDemo() {
+    setProgressByCourse({})
+    setSelectedCourseId(mathCourses[0].id)
+    setIsPracticing(false)
+    setResetComplete(true)
+
+    try {
+      window.localStorage.removeItem(PROGRESS_KEY)
+      window.localStorage.removeItem(SELECTED_COURSE_KEY)
+    } catch {
+      // Reset still applies to the current session when storage is unavailable.
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   if (isPracticing) {
     return (
       <PracticeSession
         course={selectedCourse}
         courseProgress={selectedProgress}
         key={selectedCourse.id}
+        aiStatus={aiStatus}
+        onAiStatusChange={setAiStatus}
+        onChooseCourse={chooseAnotherCourse}
         onExit={leavePractice}
         onProgress={updateCourseProgress}
       />
@@ -105,7 +153,13 @@ function App() {
           <a href="#course-catalog">Courses</a>
           <a href="#how-it-works">How it works</a>
         </nav>
-        <span className="demo-badge">Hackathon demo</span>
+        <div className="header-actions">
+          <AiStatusBadge status={aiStatus} />
+          <span className="demo-badge">Hackathon demo</span>
+          <button className="reset-demo-button" type="button" onClick={resetDemo}>
+            {resetComplete ? 'Reset complete ✓' : 'Reset demo'}
+          </button>
+        </div>
       </header>
 
       <main id="top">
@@ -211,6 +265,7 @@ function App() {
                 className="primary-button primary-button--full"
                 type="button"
                 onClick={() => {
+                  setResetComplete(false)
                   setIsPracticing(true)
                   window.scrollTo({ top: 0 })
                 }}

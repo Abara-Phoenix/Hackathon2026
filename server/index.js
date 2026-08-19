@@ -50,6 +50,16 @@ app.post('/api/questions/generate', async (request, response) => {
       return
     }
 
+    if (error.status === 429) {
+      response.status(503).json({
+        code: error.code === 'insufficient_quota'
+          ? 'AI_QUOTA_UNAVAILABLE'
+          : 'AI_RATE_LIMITED',
+        message: 'AI is temporarily unavailable, so the app will use a saved question.',
+      })
+      return
+    }
+
     console.error('Question generation failed', {
       name: error.name,
       status: error.status,
