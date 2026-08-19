@@ -17,6 +17,10 @@ export function parseNumericAnswer(rawAnswer) {
     value = value.split('=').at(-1).trim()
   }
 
+  if (!value) {
+    return null
+  }
+
   const fractionMatch = value.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(-?\d+(?:\.\d+)?)$/)
   if (fractionMatch) {
     const numerator = Number(fractionMatch[1])

@@ -46,5 +46,19 @@ response.
 - `npm run dev:api` — run only the question-generation API
 - `npm run build` — create the production frontend build
 - `npm run lint` — check the JavaScript and React code
+- `npm test` — verify answer parsing and every seeded course session
 - `npm start` — run the API and serve a built frontend when
   `NODE_ENV=production`
+
+## Three-minute demo path
+
+1. Click **Reset demo** so the mastery counters start from zero.
+2. Select **Algebra 1**, point out its five-skill mastery ladder, and start practice.
+3. Enter `5` for the first question to demonstrate feedback that keeps the student
+   on the same skill. Reveal a hint, then answer `6`.
+4. Explain that the next question is generated for the next skill when AI is
+   available. If the status changes to **Seeded mode**, continue normally—the
+   saved fallback is the reliability story, not a demo failure.
+5. Finish the three questions and show the session summary, saved mastery, and
+   **Choose another course** action. The Algebra 1 seeded answers are `6`, `6`,
+   and `4` for rehearsal.
