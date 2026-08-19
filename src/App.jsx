@@ -1,10 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import CourseCard from './components/CourseCard.jsx'
+import PracticeSession from './components/PracticeSession.jsx'
 import SkillLadder from './components/SkillLadder.jsx'
 import { getCourseById, mathCourses } from './data/mathCurriculum.js'
 import './App.css'
 
 const SELECTED_COURSE_KEY = 'solvepath:selected-course'
+const PROGRESS_KEY = 'solvepath:progress:v1'
+const EMPTY_PROGRESS = {
+  attempts: 0,
+  correct: 0,
+  completedSkillIds: [],
+  nextProblemIndex: 0,
+}
 
 function getInitialCourseId() {
   try {
@@ -15,14 +23,38 @@ function getInitialCourseId() {
   }
 }
 
+function getInitialProgress() {
+  try {
+    const savedProgress = window.localStorage.getItem(PROGRESS_KEY)
+    return savedProgress ? JSON.parse(savedProgress) : {}
+  } catch {
+    return {}
+  }
+}
+
 function App() {
   const [selectedCourseId, setSelectedCourseId] = useState(getInitialCourseId)
-  const [showPreview, setShowPreview] = useState(false)
+  const [progressByCourse, setProgressByCourse] = useState(getInitialProgress)
+  const [isPracticing, setIsPracticing] = useState(false)
   const selectedCourse = getCourseById(selectedCourseId)
+  const selectedProgress = {
+    ...EMPTY_PROGRESS,
+    ...progressByCourse[selectedCourseId],
+  }
+  const mastery = Math.round(
+    (selectedProgress.completedSkillIds.length / selectedCourse.skills.length) * 100,
+  )
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PROGRESS_KEY, JSON.stringify(progressByCourse))
+    } catch {
+      // Progress still works for the current session when storage is unavailable.
+    }
+  }, [progressByCourse])
 
   function selectCourse(courseId) {
     setSelectedCourseId(courseId)
-    setShowPreview(false)
 
     try {
       window.localStorage.setItem(SELECTED_COURSE_KEY, courseId)
@@ -36,6 +68,30 @@ function App() {
       behavior: 'smooth',
       block: 'start',
     })
+  }
+
+  function updateCourseProgress(nextProgress) {
+    setProgressByCourse((currentProgress) => ({
+      ...currentProgress,
+      [selectedCourseId]: nextProgress,
+    }))
+  }
+
+  function leavePractice() {
+    setIsPracticing(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  if (isPracticing) {
+    return (
+      <PracticeSession
+        course={selectedCourse}
+        courseProgress={selectedProgress}
+        key={selectedCourse.id}
+        onExit={leavePractice}
+        onProgress={updateCourseProgress}
+      />
+    )
   }
 
   return (
@@ -138,30 +194,49 @@ function App() {
                 <span className="path-panel__kicker">Selected path</span>
                 <h3>{selectedCourse.name}</h3>
                 <p>{selectedCourse.summary}</p>
+                <div className="path-panel__mastery">
+                  <span>{mastery}% mastered</span>
+                  <span className="path-panel__track">
+                    <span style={{ width: `${mastery}%` }} />
+                  </span>
+                </div>
               </div>
 
-              <SkillLadder course={selectedCourse} />
+              <SkillLadder
+                course={selectedCourse}
+                completedSkillIds={selectedProgress.completedSkillIds}
+              />
 
               <button
                 className="primary-button primary-button--full"
                 type="button"
-                aria-expanded={showPreview}
-                onClick={() => setShowPreview((isOpen) => !isOpen)}
+                onClick={() => {
+                  setIsPracticing(true)
+                  window.scrollTo({ top: 0 })
+                }}
               >
-                {showPreview ? 'Hide first lesson' : 'Preview first lesson'}
+                {selectedProgress.attempts > 0 ? 'Continue practice' : 'Start practice'}
                 <span aria-hidden="true">→</span>
               </button>
 
-              {showPreview && (
-                <div className="lesson-preview">
-                  <span className="lesson-preview__label">First up</span>
-                  <strong>{selectedCourse.skills[0].name}</strong>
-                  <p>{selectedCourse.skills[0].goal}</p>
-                  <span className="lesson-preview__meta">
-                    Warm-up · guided hints · about 10 minutes
-                  </span>
-                </div>
-              )}
+              <div className="lesson-preview">
+                <span className="lesson-preview__label">
+                  {selectedProgress.attempts > 0 ? 'Saved progress' : 'First up'}
+                </span>
+                <strong>
+                  {selectedProgress.attempts > 0
+                    ? `${selectedProgress.correct} of ${selectedProgress.attempts} attempts correct`
+                    : selectedCourse.skills[0].name}
+                </strong>
+                <p>
+                  {selectedProgress.attempts > 0
+                    ? 'Continue where you left off on this device.'
+                    : selectedCourse.skills[0].goal}
+                </p>
+                <span className="lesson-preview__meta">
+                  3 questions · guided hints · saved locally
+                </span>
+              </div>
             </aside>
           </div>
         </section>
