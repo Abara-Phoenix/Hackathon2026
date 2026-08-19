@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { getProblemsForCourse } from '../data/demoProblems.js'
+import { generateQuestion } from '../services/tutorApi.js'
 import { isAnswerCorrect } from '../utils/answerChecking.js'
 
 function masteryFor(course, completedSkillIds = []) {
@@ -7,12 +8,15 @@ function masteryFor(course, completedSkillIds = []) {
 }
 
 function PracticeSession({ course, courseProgress, onExit, onProgress }) {
-  const problems = getProblemsForCourse(course.id)
-  const savedIndex = Math.min(courseProgress.nextProblemIndex ?? 0, problems.length - 1)
+  const seededProblems = getProblemsForCourse(course.id)
+  const savedIndex = Math.min(courseProgress.nextProblemIndex ?? 0, seededProblems.length - 1)
+  const [problems, setProblems] = useState(seededProblems)
   const [currentIndex, setCurrentIndex] = useState(savedIndex)
   const [answer, setAnswer] = useState('')
   const [hintIndex, setHintIndex] = useState(-1)
   const [result, setResult] = useState(null)
+  const [recentMistakes, setRecentMistakes] = useState([])
+  const [generationState, setGenerationState] = useState({ status: 'idle', message: '' })
 
   const problem = problems[currentIndex]
   const skill = course.skills.find((item) => item.id === problem.skillId)
@@ -47,8 +51,17 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
           ? 'Demo set complete. Your progress is saved for the next visit.'
           : `Mastery updated. The next question moves to ${problems[currentIndex + 1].difficulty.toLowerCase()} difficulty.`,
       })
+
+      if (!isLastProblem) {
+        void prepareNextProblem(currentIndex + 1)
+      }
       return
     }
+
+    setRecentMistakes((mistakes) => [
+      `Needed another attempt on ${skill?.name ?? problem.skillId}.`,
+      ...mistakes,
+    ].slice(0, 3))
 
     setResult({
       correct: false,
@@ -56,6 +69,43 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
       message: 'That answer does not match. Check your work or reveal a hint before trying again.',
       adaptation: 'You’ll stay on this skill until the idea feels solid.',
     })
+  }
+
+  async function prepareNextProblem(nextIndex) {
+    const fallbackProblem = seededProblems[nextIndex]
+    const nextSkill = course.skills.find((item) => item.id === fallbackProblem.skillId)
+
+    setGenerationState({
+      status: 'loading',
+      message: 'Creating a fresh question for your next skill…',
+    })
+
+    try {
+      const generatedProblem = await generateQuestion({
+        course: { id: course.id, name: course.name },
+        skill: {
+          id: nextSkill.id,
+          name: nextSkill.name,
+          goal: nextSkill.goal,
+        },
+        difficulty: fallbackProblem.difficulty,
+        recentMistakes,
+        avoidPrompts: problems.map((item) => item.prompt),
+      })
+
+      setProblems((currentProblems) => currentProblems.map((item, index) => (
+        index === nextIndex ? generatedProblem : item
+      )))
+      setGenerationState({
+        status: 'success',
+        message: 'Your next question was generated for this exact skill and level.',
+      })
+    } catch {
+      setGenerationState({
+        status: 'fallback',
+        message: 'A fresh question was unavailable, so your saved fallback is ready.',
+      })
+    }
   }
 
   function showNextHint() {
@@ -72,6 +122,7 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
     setAnswer('')
     setHintIndex(-1)
     setResult(null)
+    setGenerationState({ status: 'idle', message: '' })
   }
 
   function updateAnswer(event) {
@@ -103,6 +154,9 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
                 {problem.difficulty}
               </span>
               <span className="practice-context__skill">{skill?.name}</span>
+              <span className={`question-source${problem.source === 'ai' ? ' question-source--ai' : ''}`}>
+                {problem.source === 'ai' ? 'AI generated' : 'Seeded demo'}
+              </span>
             </div>
             <span>Question {currentIndex + 1} of {problems.length}</span>
           </div>
@@ -155,6 +209,15 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
               </div>
             )}
 
+            {generationState.status !== 'idle' && (
+              <div className={`generation-note generation-note--${generationState.status}`} role="status">
+                <span className="generation-note__spinner" aria-hidden="true">
+                  {generationState.status === 'loading' ? '' : generationState.status === 'success' ? '✓' : '↻'}
+                </span>
+                <span>{generationState.message}</span>
+              </div>
+            )}
+
             <div className="question-actions">
               <button
                 className="secondary-button"
@@ -167,8 +230,15 @@ function PracticeSession({ course, courseProgress, onExit, onProgress }) {
               </button>
 
               {result?.correct && (
-                <button className="primary-button" type="button" onClick={moveForward}>
-                  {isLastProblem ? 'Finish session' : 'Next question'}
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={generationState.status === 'loading'}
+                  onClick={moveForward}
+                >
+                  {generationState.status === 'loading'
+                    ? 'Creating next question…'
+                    : isLastProblem ? 'Finish session' : 'Next question'}
                   <span aria-hidden="true">→</span>
                 </button>
               )}

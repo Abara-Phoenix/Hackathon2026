@@ -1,16 +1,50 @@
-# React + Vite
+# SolvePath
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+SolvePath is a hackathon-ready adaptive math practice app covering Algebra 1
+through Calculus 2. The first question loads instantly from a local problem
+bank, while later questions can be generated for the student's exact course,
+skill, and difficulty.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Install dependencies:
 
-## React Compiler
+   ```bash
+   npm install
+   ```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+2. Copy `.env.example` to `.env`.
 
-## Expanding the ESLint configuration
+3. Replace the placeholder `OPENAI_API_KEY` value in `.env` with a real key.
+   The key stays in the Node server and is never sent to React.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+4. Start the React app and API together:
+
+   ```bash
+   npm run dev
+   ```
+
+The web app normally runs at `http://localhost:5173` and the API at
+`http://localhost:8787`.
+
+The app also works without an API key. It automatically uses its seeded
+questions whenever AI is not configured, times out, or returns an invalid
+response.
+
+## Environment variables
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Server-side OpenAI API key | none |
+| `OPENAI_MODEL` | Model used for question generation | `gpt-5.6-luna` |
+| `PORT` | Local API port | `8787` |
+
+## Scripts
+
+- `npm run dev` — run the web app and API together
+- `npm run dev:web` — run only the Vite frontend
+- `npm run dev:api` — run only the question-generation API
+- `npm run build` — create the production frontend build
+- `npm run lint` — check the JavaScript and React code
+- `npm start` — run the API and serve a built frontend when
+  `NODE_ENV=production`
