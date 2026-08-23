@@ -49,6 +49,25 @@ response.
 | `OPENAI_MODEL` | Model used for question generation | `gpt-5.6-luna` |
 | `PORT` | Local API port | `8787` |
 
+## Deploy to Vercel
+
+The repository includes Vercel Functions for `/api/health` and
+`/api/questions/generate`. They reuse the same request validation, OpenAI call,
+and seeded-fallback responses as the local Express server.
+
+In the Vercel project, open **Settings → Environment Variables** and add:
+
+| Variable | Value | Environments |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | A funded project API key; mark it sensitive | Production and Preview |
+| `OPENAI_MODEL` | `gpt-5.6-luna` | Production and Preview |
+
+Do not prefix the key with `VITE_`, do not add `PORT`, and do not put the key in
+the repository. Environment-variable changes require a new deployment. After
+redeploying, open `https://YOUR-DOMAIN.vercel.app/api/health` and confirm that
+`aiConfigured` is `true`. A quota or generation failure still returns the
+seeded-fallback contract, so the demo remains usable.
+
 ## Scripts
 
 - `npm run dev` — run the web app and API together
