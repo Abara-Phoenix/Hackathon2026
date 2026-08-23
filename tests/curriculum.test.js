@@ -137,33 +137,25 @@ test('each expanded subject group has the intended breadth', () => {
   assert.equal(javaCourse.skills.length, 5)
 })
 
-test('every course has a valid fallback session and math covers all five skills', () => {
+test('every course has one reliable fallback question per roadmap skill', () => {
   const problemIds = new Set()
 
   for (const course of allCourses) {
     const problems = demoProblems[course.id]
     const skillIds = new Set(course.skills.map((skill) => skill.id))
-    const isMathCourse = course.subject === 'Math'
-    const expectedProblemCount = isMathCourse ? 5 : 3
-
     assert.equal(
       problems.length,
-      expectedProblemCount,
-      `${course.name} should have ${expectedProblemCount} seeded questions`,
+      course.skills.length,
+      `${course.name} should have one seeded question per skill`,
     )
-
-    if (isMathCourse) {
-      assert.deepEqual(
-        problems.map((problem) => problem.skillId),
-        course.skills.map((skill) => skill.id),
-        `${course.name} should include one seeded question per skill`,
-      )
-      assert.equal(problems[0].difficulty, 'Warm-up')
-      assert.equal(problems.some((problem) => problem.difficulty === 'Steady'), true)
-      assert.equal(problems.at(-1).difficulty, 'Stretch')
-    } else {
-      assert.deepEqual(problems.map((problem) => problem.difficulty), ['Warm-up', 'Steady', 'Stretch'])
-    }
+    assert.deepEqual(
+      problems.map((problem) => problem.skillId),
+      course.skills.map((skill) => skill.id),
+      `${course.name} should include one seeded question per skill`,
+    )
+    assert.equal(problems[0].difficulty, 'Warm-up')
+    assert.equal(problems.some((problem) => problem.difficulty === 'Steady'), true)
+    assert.equal(problems.at(-1).difficulty, 'Stretch')
 
     for (const problem of problems) {
       assert.equal(problemIds.has(problem.id), false, `duplicate problem id: ${problem.id}`)

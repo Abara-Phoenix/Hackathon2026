@@ -698,6 +698,28 @@ export const expandedDemoProblems = {
       'A private field supports encapsulation by hiding representation details and controlling access through class methods.',
       'public class Counter {\n    private int count;\n\n    public int getCount() {\n        return count;\n    }\n}',
     ),
+    multipleChoice(
+      'java-arrays-stretch',
+      'java-arrays',
+      'Stretch',
+      'What does this Java code print?',
+      ['3', '6', '9', '12'],
+      2,
+      ['The enhanced for loop visits each value in the array.', 'Add 2, then 3, then 4 to the running total.'],
+      'The loop adds all three array elements, so total is 2 + 3 + 4 = 9.',
+      'int[] values = {2, 3, 4};\nint total = 0;\nfor (int value : values) {\n    total += value;\n}\nSystem.out.println(total);',
+    ),
+    multipleChoice(
+      'java-recursion-stretch',
+      'java-inheritance',
+      'Stretch',
+      'What value is returned by sumTo(3)?',
+      ['3', '5', '6', '9'],
+      2,
+      ['Expand the calls as 3 + sumTo(2), then 2 + sumTo(1).', 'The base case returns 1.'],
+      'The recursive calls evaluate to 3 + 2 + 1, so sumTo(3) returns 6.',
+      'public static int sumTo(int n) {\n    if (n <= 1) {\n        return 1;\n    }\n    return n + sumTo(n - 1);\n}',
+    ),
   ],
   'ap-computer-science-principles': [
     multipleChoice(

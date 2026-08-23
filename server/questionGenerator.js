@@ -104,7 +104,100 @@ export function isPromptTooSimilar(prompt, previousPrompts = []) {
   })
 }
 
+function normalizeGeneratedProse(value) {
+  return value
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}(?:[-*+]\s+|>\s*)/gm, '')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function dedentCode(value) {
+  const lines = value.replace(/\t/g, '    ').split('\n')
+
+  while (lines[0]?.trim() === '') {
+    lines.shift()
+  }
+  while (lines.at(-1)?.trim() === '') {
+    lines.pop()
+  }
+
+  const indents = lines
+    .filter((line) => line.trim())
+    .map((line) => line.match(/^ */)[0].length)
+  const commonIndent = indents.length > 0 ? Math.min(...indents) : 0
+
+  return lines.map((line) => line.slice(commonIndent)).join('\n')
+}
+
+export function normalizeCodeSnippet(value, language = null) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  let normalized = value
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\r\n?/g, '\n')
+    .trim()
+  const fencedCode = normalized.match(/```[^\n`]*\n([\s\S]*?)```/)
+
+  if (fencedCode) {
+    normalized = fencedCode[1]
+  } else {
+    normalized = normalized.replace(/^```[^\n`]*\n?/, '').replace(/\n?```$/, '')
+  }
+
+  if (language) {
+    const firstLinePattern = new RegExp(`^${language.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n`, 'i')
+    normalized = normalized.replace(firstLinePattern, '')
+  }
+
+  normalized = dedentCode(normalized)
+  return normalized.length >= 3 ? normalized : null
+}
+
+function normalizeCodingQuestion(request, generatedQuestion) {
+  const promptWithPossibleCode = normalizeGeneratedProse(generatedQuestion.prompt)
+  const promptFence = promptWithPossibleCode.match(/```[^\n`]*\n([\s\S]*?)```/)
+  const extractedPromptCode = promptFence?.[1] ?? null
+  let prompt = normalizeGeneratedProse(
+    promptWithPossibleCode.replace(/```[^\n`]*\n[\s\S]*?```/g, ''),
+  )
+  const codeSnippet = normalizeCodeSnippet(
+    generatedQuestion.codeSnippet ?? extractedPromptCode,
+    request.language,
+  )
+
+  if (!codeSnippet) {
+    throw new Error('The model did not return usable raw code for a coding question.')
+  }
+
+  prompt = prompt
+    .replace(/(?:here(?:'s| is) (?:the )?code|code(?: snippet)?):?\s*$/i, '')
+    .trim()
+
+  if (prompt.length < 12) {
+    prompt = `What does this ${request.language ?? 'code'} snippet do?`
+  }
+
+  return {
+    ...generatedQuestion,
+    prompt,
+    codeSnippet,
+    choices: generatedQuestion.choices.map(normalizeGeneratedProse),
+    hints: generatedQuestion.hints.map(normalizeGeneratedProse),
+    explanation: normalizeGeneratedProse(generatedQuestion.explanation),
+  }
+}
+
 export function formatGeneratedQuestion(request, generatedQuestion) {
+  const normalizedQuestion = request.promptStyle === 'code'
+    ? normalizeCodingQuestion(request, generatedQuestion)
+    : generatedQuestion
   const questionMetadata = {
     id: `ai-${crypto.randomUUID()}`,
     skillId: request.skill.id,
@@ -115,7 +208,7 @@ export function formatGeneratedQuestion(request, generatedQuestion) {
 
   if (request.answerType !== 'multiple-choice') {
     return {
-      ...generatedQuestion,
+      ...normalizedQuestion,
       ...questionMetadata,
     }
   }
@@ -124,7 +217,7 @@ export function formatGeneratedQuestion(request, generatedQuestion) {
     answerIndex,
     choices: choiceLabels,
     ...questionContent
-  } = generatedQuestion
+  } = normalizedQuestion
 
   if (new Set(choiceLabels).size !== 4) {
     throw new Error('The model returned duplicate answer choices.')
@@ -162,7 +255,11 @@ export async function generateQuestion(request) {
 - State any rounding requirement in the prompt. Prefer exact integers or simple fractions.`
   const promptRules = request.promptStyle === 'code'
     ? `- Include a short, valid ${request.language} code snippet that the student must trace or debug.
-- Keep the snippet self-contained, safe, and under 12 lines. Do not require executing it.`
+- Keep the snippet self-contained, safe, and under 12 lines. Do not require executing it.
+- Return only raw source code in codeSnippet. Never add Markdown fences, a language label, or explanatory prose to codeSnippet.
+- Keep prompt to one or two plain-text sentences. Put all source code in codeSnippet and do not duplicate it in prompt.
+- Do not use Markdown headings, bullet markers, or fenced code anywhere in the question fields.
+- Use single backticks only for short inline identifiers in prompt, choices, hints, or explanation.`
     : '- Return codeSnippet as null when the selected output schema includes that field.'
 
   const response = await getClient().responses.parse(

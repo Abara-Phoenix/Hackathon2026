@@ -117,17 +117,3 @@ export function chooseInitialProblem(seededProblems, preferredIndex) {
     source: 'seeded',
   }
 }
-
-export function randomProblemIndex(problemCount) {
-  if (problemCount <= 1) {
-    return 0
-  }
-
-  if (globalThis.crypto?.getRandomValues) {
-    const value = new Uint32Array(1)
-    globalThis.crypto.getRandomValues(value)
-    return 1 + (value[0] % (problemCount - 1))
-  }
-
-  return 1 + Math.floor(Math.random() * (problemCount - 1))
-}

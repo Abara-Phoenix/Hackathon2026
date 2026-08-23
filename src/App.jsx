@@ -7,6 +7,7 @@ import ThemeToggle from './components/ThemeToggle.jsx'
 import { allCourses, getCourseById } from './data/curriculum.js'
 import { getTutorStatus } from './services/tutorApi.js'
 import { SESSION_LENGTH } from './utils/adaptiveSession.js'
+import { masteryFor } from './utils/courseProgress.js'
 import './App.css'
 
 const SELECTED_COURSE_KEY = 'solvepath:selected-course'
@@ -23,6 +24,7 @@ const EMPTY_PROGRESS = {
   bestStreak: 0,
   sessionCount: 0,
   completedSkillIds: [],
+  skillCheckpointCounts: {},
   nextProblemIndex: 0,
 }
 
@@ -73,9 +75,7 @@ function App() {
     ...EMPTY_PROGRESS,
     ...progressByCourse[selectedCourseId],
   }
-  const mastery = Math.round(
-    (selectedProgress.completedSkillIds.length / selectedCourse.skills.length) * 100,
-  )
+  const mastery = masteryFor(selectedCourse, selectedProgress)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -341,7 +341,7 @@ function App() {
 
               <SkillLadder
                 course={selectedCourse}
-                completedSkillIds={selectedProgress.completedSkillIds}
+                courseProgress={selectedProgress}
               />
 
               <button

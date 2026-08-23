@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import {
   chooseInitialProblem,
   createFallbackProblem,
-  randomProblemIndex,
   selectAdaptiveTarget,
   SESSION_LENGTH,
 } from '../src/utils/adaptiveSession.js'
@@ -95,7 +94,11 @@ test('the initial saved question can start from any requested position', () => {
   assert.equal(chooseInitialProblem(problems, 4).prompt, 'Second question')
 })
 
-test('a brand-new session does not default to the canonical first seed', () => {
-  assert.equal(randomProblemIndex(2), 1)
-  assert.equal(randomProblemIndex(5) > 0, true)
+test('a brand-new session can start at the first roadmap seed', () => {
+  const problems = [
+    { id: 'first', prompt: 'First skill warm-up' },
+    { id: 'second', prompt: 'Second skill practice' },
+  ]
+
+  assert.equal(chooseInitialProblem(problems, 0).prompt, 'First skill warm-up')
 })

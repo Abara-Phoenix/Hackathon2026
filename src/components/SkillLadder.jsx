@@ -1,6 +1,10 @@
-function SkillLadder({ course, completedSkillIds = [] }) {
-  const completedSkills = new Set(completedSkillIds)
-  const readyIndex = course.skills.findIndex((skill) => !completedSkills.has(skill.id))
+import { CHECKPOINTS_PER_SKILL, checkpointCountsFor } from '../utils/courseProgress.js'
+
+function SkillLadder({ course, courseProgress = {} }) {
+  const checkpointCounts = checkpointCountsFor(course, courseProgress)
+  const readyIndex = course.skills.findIndex(
+    (skill) => checkpointCounts[skill.id] < CHECKPOINTS_PER_SKILL,
+  )
 
   return (
     <div className="skill-roadmap">
@@ -11,7 +15,8 @@ function SkillLadder({ course, completedSkillIds = [] }) {
       </div>
       <ol className="skill-ladder">
         {course.skills.map((skill, index) => {
-          const isComplete = completedSkills.has(skill.id)
+          const completedCheckpoints = checkpointCounts[skill.id]
+          const isComplete = completedCheckpoints === CHECKPOINTS_PER_SKILL
           const isReady = !isComplete && index === readyIndex
 
           return (
@@ -25,14 +30,28 @@ function SkillLadder({ course, completedSkillIds = [] }) {
               <span className="skill-step__copy">
                 <strong>{skill.name}</strong>
                 <span>{skill.goal}</span>
-                <span className="skill-checkpoints" aria-label="Warm-up, application, and mastery checkpoints">
-                  <span className={isComplete || isReady ? 'skill-checkpoint skill-checkpoint--active' : 'skill-checkpoint'}>Foundation</span>
-                  <span className={isComplete ? 'skill-checkpoint skill-checkpoint--active' : 'skill-checkpoint'}>Apply</span>
-                  <span className={isComplete ? 'skill-checkpoint skill-checkpoint--active' : 'skill-checkpoint'}>Master</span>
+                <span
+                  className="skill-checkpoints"
+                  aria-label={`${completedCheckpoints} of ${CHECKPOINTS_PER_SKILL} checkpoints completed`}
+                >
+                  {['Foundation', 'Apply', 'Master'].map((checkpoint, checkpointIndex) => (
+                    <span
+                      className={checkpointIndex < completedCheckpoints
+                        ? 'skill-checkpoint skill-checkpoint--active'
+                        : 'skill-checkpoint'}
+                      key={checkpoint}
+                    >
+                      {checkpoint}
+                    </span>
+                  ))}
                 </span>
               </span>
               <span className="skill-step__status">
-                {isComplete ? 'Mastered' : isReady ? 'Ready now' : 'Upcoming'}
+                {isComplete
+                  ? 'Mastered'
+                  : completedCheckpoints > 0
+                    ? `${completedCheckpoints} of ${CHECKPOINTS_PER_SKILL}`
+                    : isReady ? 'Ready now' : 'Upcoming'}
               </span>
             </li>
           )

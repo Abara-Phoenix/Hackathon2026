@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AiStatusBadge from './AiStatusBadge.jsx'
-import MathText from './MathText.jsx'
+import PracticeText from './PracticeText.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
 import { getProblemsForCourse } from '../data/demoProblems.js'
 import { generateQuestion } from '../services/tutorApi.js'
@@ -8,14 +8,47 @@ import { buildAdaptiveDecision } from '../utils/adaptiveDecision.js'
 import {
   chooseInitialProblem,
   createFallbackProblem,
-  randomProblemIndex,
   selectAdaptiveTarget,
   SESSION_LENGTH,
 } from '../utils/adaptiveSession.js'
 import { isPracticeAnswerCorrect } from '../utils/answerChecking.js'
+import {
+  advanceSkillCheckpoint,
+  CHECKPOINTS_PER_SKILL,
+  checkpointCountsFor,
+  completedSkillsFor,
+  masteryFor,
+} from '../utils/courseProgress.js'
 
-function masteryFor(course, completedSkillIds = []) {
-  return Math.round((completedSkillIds.length / course.skills.length) * 100)
+function targetKey(target) {
+  return [target.skill.id, target.difficulty, target.approach].join('|')
+}
+
+function requestGeneratedProblem({
+  course,
+  target,
+  recentMistakes,
+  problems,
+  nextIndex,
+  performance,
+}) {
+  return generateQuestion({
+    course: { id: course.id, name: course.name, subject: course.subject },
+    skill: {
+      id: target.skill.id,
+      name: target.skill.name,
+      goal: target.skill.goal,
+    },
+    answerType: course.answerType,
+    promptStyle: course.promptStyle ?? 'standard',
+    language: course.language ?? null,
+    difficulty: target.difficulty,
+    recentMistakes,
+    avoidPrompts: problems.map((item) => item.prompt).slice(-12),
+    questionApproach: target.approach,
+    variationSeed: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${nextIndex}`,
+    performance,
+  })
 }
 
 function SessionComplete({
@@ -30,11 +63,19 @@ function SessionComplete({
   const correct = Math.max(0, courseProgress.correct - sessionStart.correct)
   const skipped = Math.max(0, (courseProgress.skipped ?? 0) - sessionStart.skipped)
   const accuracy = attempts > 0 ? Math.round((correct / attempts) * 100) : 0
-  const startingSkills = new Set(sessionStart.completedSkillIds)
+  const startingSkills = new Set(completedSkillsFor(course, sessionStart))
+  const completedSkills = completedSkillsFor(course, courseProgress)
+  const currentCheckpointCounts = checkpointCountsFor(course, courseProgress)
+  const startingCheckpointCounts = checkpointCountsFor(course, sessionStart)
   const sessionProblems = problems
   const practicedSkillIds = [...new Set(sessionProblems.map((problem) => problem.skillId))]
-  const newSkillCount = courseProgress.completedSkillIds.filter((id) => !startingSkills.has(id)).length
-  const mastery = masteryFor(course, courseProgress.completedSkillIds)
+  const newCheckpointCount = course.skills.reduce((total, skill) => (
+    total + Math.max(
+      0,
+      currentCheckpointCounts[skill.id] - startingCheckpointCounts[skill.id],
+    )
+  ), 0)
+  const mastery = masteryFor(course, courseProgress)
   const usedAi = sessionProblems.some((problem) => problem.source === 'ai')
 
   return (
@@ -56,8 +97,8 @@ function SessionComplete({
             <span>accuracy</span>
           </div>
           <div>
-            <strong>{newSkillCount}</strong>
-            <span>new skills</span>
+            <strong>{newCheckpointCount}</strong>
+            <span>new checkpoints</span>
           </div>
           <div>
             <strong>{mastery}%</strong>
@@ -77,8 +118,9 @@ function SessionComplete({
           <ul>
             {practicedSkillIds.map((skillId) => {
               const skill = course.skills.find((item) => item.id === skillId)
-              const isCompleted = courseProgress.completedSkillIds.includes(skillId)
+              const isCompleted = completedSkills.includes(skillId)
               const isNew = isCompleted && !startingSkills.has(skillId)
+              const checkpointCount = currentCheckpointCounts[skillId] ?? 0
 
               return (
                 <li key={skillId}>
@@ -86,7 +128,13 @@ function SessionComplete({
                   <div>
                     <strong>{skill?.name}</strong>
                     <small>
-                      {isNew ? 'Newly mastered' : isCompleted ? 'Mastery reinforced' : 'Scheduled for review'}
+                      {isNew
+                        ? 'Newly mastered'
+                        : isCompleted
+                          ? 'Mastery reinforced'
+                          : checkpointCount > 0
+                            ? `${checkpointCount} of ${CHECKPOINTS_PER_SKILL} checkpoints complete`
+                            : 'Scheduled for review'}
                     </small>
                   </div>
                 </li>
@@ -125,7 +173,7 @@ function PracticeSession({
     const hasHistory = courseProgress.attempts > 0 || (courseProgress.skipped ?? 0) > 0
     return hasHistory
       ? (courseProgress.nextProblemIndex ?? 0) % seededProblems.length
-      : randomProblemIndex(seededProblems.length)
+      : 0
   })
   const [problems, setProblems] = useState(() => [
     chooseInitialProblem(seededProblems, seedCursor),
@@ -139,18 +187,73 @@ function PracticeSession({
   const [skippedQuestionIndexes, setSkippedQuestionIndexes] = useState([])
   const [generationState, setGenerationState] = useState({ status: 'idle', message: '' })
   const [sessionComplete, setSessionComplete] = useState(false)
+  const prefetchedProblem = useRef(null)
   const [sessionStart, setSessionStart] = useState(() => ({
     attempts: courseProgress.attempts,
     correct: courseProgress.correct,
     skipped: courseProgress.skipped ?? 0,
     completedSkillIds: [...courseProgress.completedSkillIds],
+    skillCheckpointCounts: checkpointCountsFor(course, courseProgress),
   }))
 
   const problem = problems[currentIndex]
   const skill = course.skills.find((item) => item.id === problem.skillId)
   const answerType = problem.answerType ?? course.answerType ?? 'numeric'
-  const mastery = masteryFor(course, courseProgress.completedSkillIds)
+  const isCodeCourse = course.promptStyle === 'code'
+  const mastery = masteryFor(course, courseProgress)
   const isLastProblem = currentIndex === SESSION_LENGTH - 1
+
+  useEffect(() => {
+    if (isLastProblem || result || aiStatus?.state === 'fallback') {
+      return undefined
+    }
+
+    const predictedProgress = advanceSkillCheckpoint(course, courseProgress, problem.skillId)
+    const predictedStreak = (courseProgress.currentStreak ?? 0) + 1
+    const target = selectAdaptiveTarget({
+      course,
+      currentProblem: problem,
+      outcome: 'correct',
+      misses: 0,
+      hintsUsed: 0,
+      streak: predictedStreak,
+      completedSkillIds: predictedProgress.completedSkillIds,
+      questionNumber: currentIndex + 2,
+    })
+    const nextIndex = currentIndex + 1
+    const performance = {
+      misses: 0,
+      hintsUsed: 0,
+      streak: Math.min(predictedStreak, 100),
+    }
+    const promise = requestGeneratedProblem({
+      course,
+      target,
+      recentMistakes,
+      problems,
+      nextIndex,
+      performance,
+    })
+
+    promise.catch(() => null)
+    prefetchedProblem.current = {
+      key: targetKey(target),
+      nextIndex,
+      promise,
+    }
+
+    return undefined
+  }, [
+    aiStatus?.state,
+    course,
+    courseProgress,
+    currentIndex,
+    isLastProblem,
+    problem,
+    problems,
+    recentMistakes,
+    result,
+  ])
 
   function submitAnswer(event) {
     event.preventDefault()
@@ -160,11 +263,17 @@ function PracticeSession({
     }
 
     const correct = isPracticeAnswerCorrect(answer, problem, course.answerType)
-    const masteredThisAttempt = correct && missesOnProblem === 0 && hintIndex < 0
+    const earnedCheckpoint = correct && missesOnProblem === 0 && hintIndex < 0
+    const checkpointUpdate = earnedCheckpoint
+      ? advanceSkillCheckpoint(course, courseProgress, problem.skillId)
+      : {
+        skillCheckpointCounts: checkpointCountsFor(course, courseProgress),
+        completedSkillIds: completedSkillsFor(course, courseProgress),
+        skillMastered: false,
+      }
+    const masteredThisAttempt = checkpointUpdate.skillMastered
     const nextStreak = correct ? (courseProgress.currentStreak ?? 0) + 1 : 0
-    const completedSkillIds = masteredThisAttempt
-      ? [...new Set([...courseProgress.completedSkillIds, problem.skillId])]
-      : courseProgress.completedSkillIds
+    const completedSkillIds = checkpointUpdate.completedSkillIds
     const nextTarget = correct && !isLastProblem
       ? selectAdaptiveTarget({
         course,
@@ -195,6 +304,7 @@ function PracticeSession({
       attempts: courseProgress.attempts + 1,
       correct: courseProgress.correct + (correct ? 1 : 0),
       completedSkillIds,
+      skillCheckpointCounts: checkpointUpdate.skillCheckpointCounts,
       currentStreak: nextStreak,
       bestStreak: Math.max(courseProgress.bestStreak ?? 0, nextStreak),
       nextProblemIndex: (seedCursor + 1) % seededProblems.length,
@@ -246,23 +356,27 @@ function PracticeSession({
     })
 
     try {
-      const generatedProblem = await generateQuestion({
-        course: { id: course.id, name: course.name, subject: course.subject },
-        skill: {
-          id: target.skill.id,
-          name: target.skill.name,
-          goal: target.skill.goal,
-        },
-        answerType: course.answerType,
-        promptStyle: course.promptStyle ?? 'standard',
-        language: course.language ?? null,
-        difficulty: target.difficulty,
-        recentMistakes,
-        avoidPrompts: problems.map((item) => item.prompt).slice(-12),
-        questionApproach: target.approach,
-        variationSeed: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${nextIndex}`,
-        performance,
-      })
+      const preparedProblem = prefetchedProblem.current
+      const canUsePrefetch = preparedProblem?.nextIndex === nextIndex
+        && preparedProblem.key === targetKey(target)
+      let generatedProblem
+
+      if (canUsePrefetch) {
+        generatedProblem = await preparedProblem.promise
+      } else if (aiStatus?.state === 'fallback') {
+        throw new Error('Saved-question mode is active.')
+      } else {
+        generatedProblem = await requestGeneratedProblem({
+          course,
+          target,
+          recentMistakes,
+          problems,
+          nextIndex,
+          performance,
+        })
+      }
+
+      prefetchedProblem.current = null
 
       setProblems((currentProblems) => {
         const nextProblems = [...currentProblems]
@@ -279,6 +393,7 @@ function PracticeSession({
         message: 'Fresh AI questions are available.',
       })
     } catch {
+      prefetchedProblem.current = null
       setProblems((currentProblems) => {
         const nextProblems = [...currentProblems]
         nextProblems[nextIndex] = fallbackProblem
@@ -397,6 +512,7 @@ function PracticeSession({
       correct: courseProgress.correct,
       skipped: courseProgress.skipped ?? 0,
       completedSkillIds: [...courseProgress.completedSkillIds],
+      skillCheckpointCounts: checkpointCountsFor(course, courseProgress),
     })
     setProblems([chooseInitialProblem(seededProblems, nextSeedCursor)])
     setCurrentIndex(0)
@@ -467,13 +583,19 @@ function PracticeSession({
               {answerType === 'multiple-choice' ? 'Choose the best answer' : 'Solve the problem'}
             </p>
             <h1 id="practice-question">
-              <MathText>{problem.prompt}</MathText>
+              <PracticeText codeAware={isCodeCourse}>{problem.prompt}</PracticeText>
             </h1>
 
             {problem.codeSnippet && (
-              <pre className="code-question" aria-label={`${course.language ?? 'Code'} for this question`}>
-                <code>{problem.codeSnippet}</code>
-              </pre>
+              <div className="code-question-shell">
+                <div className="code-question__header" aria-hidden="true">
+                  <span>{course.language ?? 'Code'}</span>
+                  <span>Read only</span>
+                </div>
+                <pre className="code-question" aria-label={`${course.language ?? 'Code'} for this question`}>
+                  <code>{problem.codeSnippet}</code>
+                </pre>
+              </div>
             )}
 
             {answerType === 'multiple-choice' ? (
@@ -492,7 +614,7 @@ function PracticeSession({
                       <span className="choice-option__letter" aria-hidden="true">
                         {String.fromCharCode(65 + index)}
                       </span>
-                      <MathText>{choice.label}</MathText>
+                      <PracticeText codeAware={isCodeCourse}>{choice.label}</PracticeText>
                     </label>
                   ))}
                 </fieldset>
@@ -533,7 +655,7 @@ function PracticeSession({
                 <span className="hint-card__icon" aria-hidden="true">?</span>
                 <div>
                   <strong>Hint {hintIndex + 1}</strong>
-                  <p><MathText>{problem.hints[hintIndex]}</MathText></p>
+                  <p><PracticeText codeAware={isCodeCourse}>{problem.hints[hintIndex]}</PracticeText></p>
                 </div>
               </div>
             )}
@@ -545,7 +667,7 @@ function PracticeSession({
                 </span>
                 <div>
                   <strong>{result.title}</strong>
-                  <p><MathText>{result.message}</MathText></p>
+                  <p><PracticeText codeAware={isCodeCourse}>{result.message}</PracticeText></p>
                 </div>
               </div>
             )}

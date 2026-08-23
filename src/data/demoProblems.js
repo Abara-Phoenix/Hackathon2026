@@ -1,6 +1,8 @@
 import { expandedDemoProblems } from './expandedDemoProblems.js'
+import { allCourses } from './curriculum.js'
+import { ensureFallbackCoverage } from './fallbackCoverage.js'
 
-export const demoProblems = {
+const baseDemoProblems = {
   'algebra-1': [
     {
       id: 'a1-linear-warmup',
@@ -431,6 +433,42 @@ export const demoProblems = {
       ],
       explanation: 'In the light-dependent reactions, water molecules are split. Their oxygen atoms combine to form the O₂ released by the plant.',
     },
+    {
+      id: 'bio-evolution-stretch',
+      skillId: 'evolution',
+      difficulty: 'Stretch',
+      prompt: 'After repeated antibiotic use, a bacterial population contains a larger percentage of resistant bacteria. Which explanation best fits natural selection?',
+      choices: [
+        { id: 'needed-resistance', label: 'Each bacterium developed resistance because it needed to survive' },
+        { id: 'resistant-reproduced', label: 'Resistant bacteria survived and reproduced more successfully' },
+        { id: 'antibiotic-created', label: 'The antibiotic intentionally created useful mutations' },
+        { id: 'all-identical', label: 'All bacteria were genetically identical before treatment' },
+      ],
+      answer: 'resistant-reproduced',
+      hints: [
+        'Natural selection acts on variation that already exists in a population.',
+        'Compare the reproductive success of resistant and nonresistant bacteria after treatment.',
+      ],
+      explanation: 'The antibiotic creates a selection pressure: resistant bacteria survive and leave more offspring, so resistance becomes more common.',
+    },
+    {
+      id: 'bio-ecology-stretch',
+      skillId: 'ecology',
+      difficulty: 'Stretch',
+      prompt: 'Why is less energy available to organisms at each higher trophic level of an ecosystem?',
+      choices: [
+        { id: 'energy-destroyed', label: 'Consumers destroy all energy in their food' },
+        { id: 'energy-lost-heat', label: 'Organisms use energy for life processes and release much of it as heat' },
+        { id: 'producers-no-energy', label: 'Producers contain no stored chemical energy' },
+        { id: 'matter-disappears', label: 'Matter disappears whenever an organism is eaten' },
+      ],
+      answer: 'energy-lost-heat',
+      hints: [
+        'Organisms use much of the energy they obtain before another organism eats them.',
+        'Cellular respiration transfers some chemical energy to the surroundings as heat.',
+      ],
+      explanation: 'Energy transfer is inefficient because organisms use energy for metabolism, movement, and maintenance, releasing much of it as heat.',
+    },
   ],
   chemistry: [
     {
@@ -487,6 +525,42 @@ export const demoProblems = {
       ],
       explanation: 'The balanced equation gives a 1:2 ratio of O₂ to H₂O, so 3 moles of O₂ produce 6 moles of H₂O.',
     },
+    {
+      id: 'chem-acids-stretch',
+      skillId: 'chem-acids-bases',
+      difficulty: 'Stretch',
+      prompt: 'Compared with a solution at pH 5, how many times greater is the hydrogen-ion concentration of a solution at pH 3?',
+      choices: [
+        { id: 'two-times', label: '2 times' },
+        { id: 'ten-times', label: '10 times' },
+        { id: 'one-hundred-times', label: '100 times' },
+        { id: 'one-thousand-times', label: '1,000 times' },
+      ],
+      answer: 'one-hundred-times',
+      hints: [
+        'Each one-unit decrease in pH represents ten times more hydrogen ions.',
+        'The pH changes by two units, so multiply by 10 twice.',
+      ],
+      explanation: 'A two-unit pH decrease corresponds to 10², or 100 times, greater hydrogen-ion concentration.',
+    },
+    {
+      id: 'chem-energy-stretch',
+      skillId: 'chem-thermochemistry',
+      difficulty: 'Stretch',
+      prompt: 'A reaction warms its surroundings while it occurs. Which description best fits the reaction?',
+      choices: [
+        { id: 'endothermic-absorbs', label: 'Endothermic because it absorbs heat from the surroundings' },
+        { id: 'exothermic-releases', label: 'Exothermic because it releases heat to the surroundings' },
+        { id: 'no-energy', label: 'It has no energy change because temperature changed' },
+        { id: 'equilibrium-only', label: 'It must be at equilibrium' },
+      ],
+      answer: 'exothermic-releases',
+      hints: [
+        'Track the direction in which thermal energy moves.',
+        'If the surroundings warm, the reacting system transferred energy outward.',
+      ],
+      explanation: 'An exothermic reaction releases thermal energy to its surroundings, which can make them warmer.',
+    },
   ],
   physics: [
     {
@@ -542,6 +616,42 @@ export const demoProblems = {
         'Multiply 2 kg × 10 m/s² × 5 m.',
       ],
       explanation: 'Gravitational potential energy is mgh = 2 × 10 × 5 = 100 joules.',
+    },
+    {
+      id: 'physics-waves-stretch',
+      skillId: 'physics-waves',
+      difficulty: 'Stretch',
+      prompt: 'A wave has a frequency of 8 Hz and a wavelength of 2 meters. What is its speed?',
+      choices: [
+        { id: 'four-ms-wave', label: '4 m/s' },
+        { id: 'six-ms-wave', label: '6 m/s' },
+        { id: 'ten-ms-wave', label: '10 m/s' },
+        { id: 'sixteen-ms-wave', label: '16 m/s' },
+      ],
+      answer: 'sixteen-ms-wave',
+      hints: [
+        'Wave speed equals frequency multiplied by wavelength.',
+        'Multiply 8 cycles per second by 2 meters per cycle.',
+      ],
+      explanation: 'Using v = fλ, the wave speed is 8 × 2 = 16 m/s.',
+    },
+    {
+      id: 'physics-electricity-stretch',
+      skillId: 'physics-electricity',
+      difficulty: 'Stretch',
+      prompt: 'A 12-volt battery is connected across a 4-ohm resistor. What current flows through the resistor?',
+      choices: [
+        { id: 'three-amps', label: '3 A' },
+        { id: 'eight-amps', label: '8 A' },
+        { id: 'sixteen-amps', label: '16 A' },
+        { id: 'forty-eight-amps', label: '48 A' },
+      ],
+      answer: 'three-amps',
+      hints: [
+        'Use Ohm’s law: V = IR.',
+        'Solve for current by dividing voltage by resistance.',
+      ],
+      explanation: 'Ohm’s law gives I = V/R = 12/4 = 3 amperes.',
     },
   ],
   'us-history': [
@@ -938,9 +1048,49 @@ export const demoProblems = {
       ],
       explanation: 'total += number adds 1, then 2, then 3 to the running total, producing 6.',
     },
+    {
+      id: 'python-functions-stretch',
+      skillId: 'python-functions',
+      difficulty: 'Stretch',
+      prompt: 'What does this Python program print?',
+      codeSnippet: 'def double(value):\n    return value * 2\n\nresult = double(3) + 1\nprint(result)',
+      choices: [
+        { id: 'python-four', label: '4' },
+        { id: 'python-six', label: '6' },
+        { id: 'python-seven', label: '7' },
+        { id: 'python-eight', label: '8' },
+      ],
+      answer: 'python-seven',
+      hints: [
+        'Trace the return value of double(3) first.',
+        'The function returns 6, and the calling expression then adds 1.',
+      ],
+      explanation: 'double(3) returns 6, so result becomes 6 + 1 and the program prints 7.',
+    },
+    {
+      id: 'python-lists-debugging-stretch',
+      skillId: 'python-lists-debugging',
+      difficulty: 'Stretch',
+      prompt: 'Which replacement prevents this loop from attempting an index past the end of the list?',
+      codeSnippet: 'values = [4, 7, 9]\n\nfor index in range(len(values) + 1):\n    print(values[index])',
+      choices: [
+        { id: 'python-range-length', label: 'range(len(values))' },
+        { id: 'python-range-one', label: 'range(1)' },
+        { id: 'python-negative-index', label: 'range(-len(values))' },
+        { id: 'python-append', label: 'values.append(index)' },
+      ],
+      answer: 'python-range-length',
+      hints: [
+        'A three-item list has valid indexes 0, 1, and 2.',
+        'range(len(values)) stops before the list length.',
+      ],
+      explanation: 'range(len(values)) produces exactly the valid list indexes and avoids the out-of-range index 3.',
+    },
   ],
   ...expandedDemoProblems,
 }
+
+export const demoProblems = ensureFallbackCoverage(baseDemoProblems, allCourses)
 
 export function getProblemsForCourse(courseId) {
   return demoProblems[courseId] ?? demoProblems['algebra-1']

@@ -1,3 +1,5 @@
+const AI_GENERATION_TIMEOUT_MS = 12_000
+
 function isGeneratedQuestion(question) {
   const hasCommonFields = (
     question &&
@@ -64,7 +66,7 @@ export async function generateQuestion(context) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(context),
-    signal: AbortSignal.timeout(22_000),
+    signal: AbortSignal.timeout(AI_GENERATION_TIMEOUT_MS),
   })
 
   const payload = await response.json().catch(() => ({}))

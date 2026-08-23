@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   formatGeneratedQuestion,
   isPromptTooSimilar,
+  normalizeCodeSnippet,
   QuestionRequestSchema,
 } from '../server/questionGenerator.js'
 
@@ -108,6 +109,60 @@ test('a generated Python response keeps its code snippet', () => {
 
   assert.equal(question.codeSnippet, 'value = 2\nprint(value * 3)')
   assert.equal(question.answer, 'choice-3')
+})
+
+test('generated coding questions remove Markdown fences and normalize indentation', () => {
+  const question = formatGeneratedQuestion(
+    {
+      ...baseRequest,
+      answerType: 'multiple-choice',
+      promptStyle: 'code',
+      language: 'Python',
+    },
+    {
+      prompt: '## Trace the program and choose its output.\n\n```python\nvalue = 2\nprint(value * 3)\n```',
+      codeSnippet: '```python\n    value = 2\n    print(value * 3)\n```',
+      choices: ['`2`', '`3`', '`5`', '`6`'],
+      answerIndex: 3,
+      hints: ['Trace `value` first.', 'Then evaluate the multiplication.'],
+      explanation: 'The expression evaluates to `6`.',
+    },
+  )
+
+  assert.equal(question.prompt, 'Trace the program and choose its output.')
+  assert.equal(question.codeSnippet, 'value = 2\nprint(value * 3)')
+  assert.equal(question.prompt.includes('```'), false)
+  assert.equal(question.choices[3].label, '`6`')
+})
+
+test('coding questions recover raw code that was mistakenly placed in the prompt', () => {
+  const question = formatGeneratedQuestion(
+    {
+      ...baseRequest,
+      answerType: 'multiple-choice',
+      promptStyle: 'code',
+      language: 'Java',
+    },
+    {
+      prompt: 'What value is printed?\n```java\nint total = 4;\nSystem.out.println(total);\n```',
+      codeSnippet: null,
+      choices: ['0', '2', '4', '8'],
+      answerIndex: 2,
+      hints: ['Read the assignment.', 'Trace the print statement.'],
+      explanation: 'The variable stores 4, so the program prints 4.',
+    },
+  )
+
+  assert.equal(question.prompt, 'What value is printed?')
+  assert.equal(question.codeSnippet, 'int total = 4;\nSystem.out.println(total);')
+})
+
+test('code normalization handles line endings, language labels, and outer whitespace', () => {
+  assert.equal(
+    normalizeCodeSnippet('  \r\nPython\r\n\tcount = 2\r\n\tprint(count)\r\n', 'Python'),
+    'count = 2\nprint(count)',
+  )
+  assert.equal(normalizeCodeSnippet('```python\n```', 'Python'), null)
 })
 
 test('generated Biology choices must be unique', () => {
