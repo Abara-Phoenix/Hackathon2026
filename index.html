@@ -9,6 +9,18 @@
       content="SolvePath provides adaptive practice across 48 high-school courses, from core subjects to AP, coding, arts, and career skills."
     />
     <meta name="theme-color" content="#f6f7fb" />
+    <script>
+      try {
+        const savedTheme = localStorage.getItem('solvepath:theme')
+        const theme = savedTheme === 'light' || savedTheme === 'dark'
+          ? savedTheme
+          : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        document.documentElement.dataset.theme = theme
+        document.documentElement.style.colorScheme = theme
+      } catch {
+        document.documentElement.dataset.theme = 'light'
+      }
+    </script>
     <title>SolvePath — Adaptive practice for every subject</title>
   </head>
   <body>

@@ -3,12 +3,15 @@ import AiStatusBadge from './components/AiStatusBadge.jsx'
 import CourseCard from './components/CourseCard.jsx'
 import PracticeSession from './components/PracticeSession.jsx'
 import SkillLadder from './components/SkillLadder.jsx'
+import ThemeToggle from './components/ThemeToggle.jsx'
 import { allCourses, getCourseById } from './data/curriculum.js'
+import { getProblemsForCourse } from './data/demoProblems.js'
 import { getTutorStatus } from './services/tutorApi.js'
 import './App.css'
 
 const SELECTED_COURSE_KEY = 'solvepath:selected-course'
 const PROGRESS_KEY = 'solvepath:progress:v1'
+const THEME_KEY = 'solvepath:theme'
 const SUBJECT_FILTERS = ['All', ...new Set(allCourses.map((course) => course.subject))]
 const SUBJECT_COUNT = new Set(allCourses.map((course) => course.subject)).size
 const SKILL_COUNT = allCourses.reduce((total, course) => total + course.skills.length, 0)
@@ -37,6 +40,19 @@ function getInitialProgress() {
   }
 }
 
+function getInitialTheme() {
+  try {
+    const savedTheme = window.localStorage.getItem(THEME_KEY)
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      return savedTheme
+    }
+
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  } catch {
+    return 'light'
+  }
+}
+
 function App() {
   const [selectedCourseId, setSelectedCourseId] = useState(getInitialCourseId)
   const [progressByCourse, setProgressByCourse] = useState(getInitialProgress)
@@ -44,6 +60,7 @@ function App() {
   const [subjectFilter, setSubjectFilter] = useState('All')
   const [aiStatus, setAiStatus] = useState({ state: 'checking', message: 'Checking AI availability.' })
   const [resetComplete, setResetComplete] = useState(false)
+  const [theme, setTheme] = useState(getInitialTheme)
   const selectedCourse = getCourseById(selectedCourseId)
   const visibleCourses = subjectFilter === 'All'
     ? allCourses
@@ -55,6 +72,22 @@ function App() {
   const mastery = Math.round(
     (selectedProgress.completedSkillIds.length / selectedCourse.skills.length) * 100,
   )
+  const selectedProblemCount = getProblemsForCourse(selectedCourseId).length
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.documentElement.style.colorScheme = theme
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+      'content',
+      theme === 'dark' ? '#0d1422' : '#f6f7fb',
+    )
+
+    try {
+      window.localStorage.setItem(THEME_KEY, theme)
+    } catch {
+      // Theme still applies for the current session when storage is unavailable.
+    }
+  }, [theme])
 
   useEffect(() => {
     try {
@@ -146,6 +179,10 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  function toggleTheme() {
+    setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'))
+  }
+
   if (isPracticing) {
     return (
       <PracticeSession
@@ -157,6 +194,8 @@ function App() {
         onChooseCourse={chooseAnotherCourse}
         onExit={leavePractice}
         onProgress={updateCourseProgress}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
     )
   }
@@ -173,6 +212,7 @@ function App() {
           <a href="#how-it-works">How it works</a>
         </nav>
         <div className="header-actions">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <AiStatusBadge status={aiStatus} />
           <span className="demo-badge">Hackathon demo</span>
           <button className="reset-demo-button" type="button" onClick={resetDemo}>
@@ -329,7 +369,7 @@ function App() {
                     : selectedCourse.skills[0].goal}
                 </p>
                 <span className="lesson-preview__meta">
-                  3 questions · guided hints · saved locally
+                  {selectedProblemCount} questions · guided hints · saved locally
                 </span>
               </div>
             </aside>

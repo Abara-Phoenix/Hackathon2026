@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import AiStatusBadge from './AiStatusBadge.jsx'
+import MathText from './MathText.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 import { getProblemsForCourse } from '../data/demoProblems.js'
 import { generateQuestion } from '../services/tutorApi.js'
 import { buildAdaptiveDecision } from '../utils/adaptiveDecision.js'
@@ -100,6 +102,8 @@ function PracticeSession({
   onChooseCourse,
   onExit,
   onProgress,
+  theme,
+  onToggleTheme,
 }) {
   const seededProblems = getProblemsForCourse(course.id)
   const savedIndex = Math.min(courseProgress.nextProblemIndex ?? 0, seededProblems.length - 1)
@@ -288,6 +292,7 @@ function PracticeSession({
           <span>SolvePath</span>
         </button>
         <span className="practice-header__course">{course.name}</span>
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         <AiStatusBadge status={aiStatus} />
         <button className="back-button" type="button" onClick={onExit}>
           <span aria-hidden="true">←</span>
@@ -327,7 +332,9 @@ function PracticeSession({
             <p className="question-card__eyebrow">
               {answerType === 'multiple-choice' ? 'Choose the best answer' : 'Solve the problem'}
             </p>
-            <h1 id="practice-question">{problem.prompt}</h1>
+            <h1 id="practice-question">
+              <MathText>{problem.prompt}</MathText>
+            </h1>
 
             {problem.codeSnippet && (
               <pre className="code-question" aria-label={`${course.language ?? 'Code'} for this question`}>
@@ -351,7 +358,7 @@ function PracticeSession({
                       <span className="choice-option__letter" aria-hidden="true">
                         {String.fromCharCode(65 + index)}
                       </span>
-                      <span>{choice.label}</span>
+                      <MathText>{choice.label}</MathText>
                     </label>
                   ))}
                 </fieldset>
@@ -392,7 +399,7 @@ function PracticeSession({
                 <span className="hint-card__icon" aria-hidden="true">?</span>
                 <div>
                   <strong>Hint {hintIndex + 1}</strong>
-                  <p>{problem.hints[hintIndex]}</p>
+                  <p><MathText>{problem.hints[hintIndex]}</MathText></p>
                 </div>
               </div>
             )}
@@ -404,7 +411,7 @@ function PracticeSession({
                 </span>
                 <div>
                   <strong>{result.title}</strong>
-                  <p>{result.message}</p>
+                  <p><MathText>{result.message}</MathText></p>
                 </div>
               </div>
             )}

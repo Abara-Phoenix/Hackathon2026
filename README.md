@@ -11,8 +11,9 @@ Computer Science Principles, web development, cybersecurity, and data science.
 
 Math uses numeric evaluation, most subjects use subject-aware multiple choice,
 and programming courses add formatted code tracing and debugging questions.
-Every course has a dependable three-question local session with explanations
-and progressive hints. Later questions can be generated for the student's
+Every course has a dependable local session with explanations and progressive
+hints. All nine math courses include five seeded questions—one per mastery
+skill—while the remaining courses use focused three-question demos. Later questions can be generated for the student's
 exact subject, course, skill, language, answer format, and difficulty.
 
 ## Run locally
@@ -89,9 +90,9 @@ seeded-fallback contract, so the demo remains usable.
 4. Explain that the next question is generated for the next skill when AI is
    available. If the status changes to **Seeded mode**, continue normally—the
    saved fallback is the reliability story, not a demo failure.
-5. Finish the three questions and show the session summary, saved mastery, and
+5. Finish the five Algebra 1 questions and show the session summary, saved mastery, and
    **Choose another course** action. The Algebra 1 seeded answers are `6`, `6`,
-   and `4` for rehearsal.
+   `4`, `2`, and `6` for rehearsal.
 
 For a quick cross-subject moment, choose **Biology** after the summary and show
 that the same mastery engine now renders multiple-choice practice. The seeded
