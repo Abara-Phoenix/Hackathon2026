@@ -50,3 +50,30 @@ test('the final correct answer routes to the session summary', () => {
   assert.equal(decision.title, 'Save Linear equations mastery')
   assert.equal(decision.routeTo, 'Session summary')
 })
+
+test('a skipped question is recorded as a review signal without a wrong answer', () => {
+  const decision = buildAdaptiveDecision({
+    ...baseContext,
+    correct: false,
+    skipped: true,
+    isLastProblem: false,
+  })
+
+  assert.equal(decision.tone, 'review')
+  assert.equal(decision.title, 'Try a new Linear equations example')
+  assert.equal(decision.evidence, 'Question skipped • Review signal recorded')
+  assert.equal(decision.routeTo, 'Steady')
+})
+
+test('a supported final answer saves progress without claiming mastery', () => {
+  const decision = buildAdaptiveDecision({
+    ...baseContext,
+    correct: true,
+    mastered: false,
+    isLastProblem: true,
+    hintsUsed: 1,
+  })
+
+  assert.equal(decision.title, 'Save Linear equations progress')
+  assert.match(decision.message, /keeps this skill active/i)
+})

@@ -15,14 +15,30 @@ function successEvidence(misses, hintsUsed) {
 
 export function buildAdaptiveDecision({
   correct,
+  mastered = correct,
+  skipped = false,
   isLastProblem,
   currentSkillName,
   nextSkillName,
   currentDifficulty,
   nextDifficulty,
+  adaptationReason,
   misses = 0,
   hintsUsed = 0,
 }) {
+  if (skipped) {
+    return {
+      tone: 'review',
+      title: isLastProblem ? `Save ${currentSkillName} for review` : `Try a new ${currentSkillName} example`,
+      message: isLastProblem
+        ? 'SolvePath recorded the skip without counting it as a wrong answer and added this skill to the next review path.'
+        : adaptationReason ?? 'SolvePath recorded the skip without counting it as a wrong answer, then selected a fresh example at a more supportive level.',
+      evidence: 'Question skipped • Review signal recorded',
+      routeFrom: currentDifficulty,
+      routeTo: isLastProblem ? 'Session summary' : nextDifficulty,
+    }
+  }
+
   if (!correct) {
     return {
       tone: 'review',
@@ -37,8 +53,10 @@ export function buildAdaptiveDecision({
   if (isLastProblem) {
     return {
       tone: 'complete',
-      title: `Save ${currentSkillName} mastery`,
-      message: 'The final demo skill is complete, so SolvePath saves this result and prepares an updated session summary.',
+      title: mastered ? `Save ${currentSkillName} mastery` : `Save ${currentSkillName} progress`,
+      message: mastered
+        ? 'The final skill is complete, so SolvePath saves this result and prepares an updated session summary.'
+        : 'The answer was correct with support, so SolvePath saves the progress and keeps this skill active for a future review.',
       evidence: successEvidence(misses, hintsUsed),
       routeFrom: currentDifficulty,
       routeTo: 'Session summary',
@@ -47,8 +65,11 @@ export function buildAdaptiveDecision({
 
   return {
     tone: 'advance',
-    title: `Advance to ${nextSkillName}`,
-    message: `${currentSkillName} is now mastered, so the next problem targets ${nextSkillName} at ${nextDifficulty.toLowerCase()} difficulty.`,
+    title: nextSkillName === currentSkillName
+      ? `Reinforce ${currentSkillName}`
+      : `Advance to ${nextSkillName}`,
+    message: adaptationReason
+      ?? `${currentSkillName} is now mastered, so the next problem targets ${nextSkillName} at ${nextDifficulty.toLowerCase()} difficulty.`,
     evidence: successEvidence(misses, hintsUsed),
     routeFrom: currentDifficulty,
     routeTo: nextDifficulty,

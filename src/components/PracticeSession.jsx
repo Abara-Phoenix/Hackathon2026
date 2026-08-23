@@ -5,6 +5,13 @@ import ThemeToggle from './ThemeToggle.jsx'
 import { getProblemsForCourse } from '../data/demoProblems.js'
 import { generateQuestion } from '../services/tutorApi.js'
 import { buildAdaptiveDecision } from '../utils/adaptiveDecision.js'
+import {
+  chooseInitialProblem,
+  createFallbackProblem,
+  randomProblemIndex,
+  selectAdaptiveTarget,
+  SESSION_LENGTH,
+} from '../utils/adaptiveSession.js'
 import { isPracticeAnswerCorrect } from '../utils/answerChecking.js'
 
 function masteryFor(course, completedSkillIds = []) {
@@ -21,9 +28,10 @@ function SessionComplete({
 }) {
   const attempts = Math.max(0, courseProgress.attempts - sessionStart.attempts)
   const correct = Math.max(0, courseProgress.correct - sessionStart.correct)
+  const skipped = Math.max(0, (courseProgress.skipped ?? 0) - sessionStart.skipped)
   const accuracy = attempts > 0 ? Math.round((correct / attempts) * 100) : 0
   const startingSkills = new Set(sessionStart.completedSkillIds)
-  const sessionProblems = problems.slice(sessionStart.startIndex)
+  const sessionProblems = problems
   const practicedSkillIds = [...new Set(sessionProblems.map((problem) => problem.skillId))]
   const newSkillCount = courseProgress.completedSkillIds.filter((id) => !startingSkills.has(id)).length
   const mastery = masteryFor(course, courseProgress.completedSkillIds)
@@ -55,6 +63,10 @@ function SessionComplete({
             <strong>{mastery}%</strong>
             <span>course mastery</span>
           </div>
+          <div>
+            <strong>{skipped}</strong>
+            <span>skipped</span>
+          </div>
         </div>
 
         <div className="completion-skills">
@@ -65,14 +77,17 @@ function SessionComplete({
           <ul>
             {practicedSkillIds.map((skillId) => {
               const skill = course.skills.find((item) => item.id === skillId)
-              const isNew = !startingSkills.has(skillId)
+              const isCompleted = courseProgress.completedSkillIds.includes(skillId)
+              const isNew = isCompleted && !startingSkills.has(skillId)
 
               return (
                 <li key={skillId}>
                   <span aria-hidden="true">✓</span>
                   <div>
                     <strong>{skill?.name}</strong>
-                    <small>{isNew ? 'Newly mastered' : 'Mastery reinforced'}</small>
+                    <small>
+                      {isNew ? 'Newly mastered' : isCompleted ? 'Mastery reinforced' : 'Scheduled for review'}
+                    </small>
                   </div>
                 </li>
               )
@@ -106,60 +121,83 @@ function PracticeSession({
   onToggleTheme,
 }) {
   const seededProblems = getProblemsForCourse(course.id)
-  const savedIndex = Math.min(courseProgress.nextProblemIndex ?? 0, seededProblems.length - 1)
-  const [problems, setProblems] = useState(seededProblems)
-  const [currentIndex, setCurrentIndex] = useState(savedIndex)
+  const [seedCursor, setSeedCursor] = useState(() => {
+    const hasHistory = courseProgress.attempts > 0 || (courseProgress.skipped ?? 0) > 0
+    return hasHistory
+      ? (courseProgress.nextProblemIndex ?? 0) % seededProblems.length
+      : randomProblemIndex(seededProblems.length)
+  })
+  const [problems, setProblems] = useState(() => [
+    chooseInitialProblem(seededProblems, seedCursor),
+  ])
+  const [currentIndex, setCurrentIndex] = useState(0)
   const [answer, setAnswer] = useState('')
   const [hintIndex, setHintIndex] = useState(-1)
   const [result, setResult] = useState(null)
   const [recentMistakes, setRecentMistakes] = useState([])
   const [missesOnProblem, setMissesOnProblem] = useState(0)
+  const [skippedQuestionIndexes, setSkippedQuestionIndexes] = useState([])
   const [generationState, setGenerationState] = useState({ status: 'idle', message: '' })
   const [sessionComplete, setSessionComplete] = useState(false)
   const [sessionStart, setSessionStart] = useState(() => ({
     attempts: courseProgress.attempts,
     correct: courseProgress.correct,
+    skipped: courseProgress.skipped ?? 0,
     completedSkillIds: [...courseProgress.completedSkillIds],
-    startIndex: savedIndex,
   }))
 
   const problem = problems[currentIndex]
   const skill = course.skills.find((item) => item.id === problem.skillId)
   const answerType = problem.answerType ?? course.answerType ?? 'numeric'
   const mastery = masteryFor(course, courseProgress.completedSkillIds)
-  const isLastProblem = currentIndex === problems.length - 1
+  const isLastProblem = currentIndex === SESSION_LENGTH - 1
 
   function submitAnswer(event) {
     event.preventDefault()
 
-    if (!answer.trim() || result?.correct) {
+    if (!answer.trim() || result?.correct || result?.skipped) {
       return
     }
 
     const correct = isPracticeAnswerCorrect(answer, problem, course.answerType)
-    const nextProblem = isLastProblem ? null : problems[currentIndex + 1]
-    const nextSkill = nextProblem
-      ? course.skills.find((item) => item.id === nextProblem.skillId)
+    const masteredThisAttempt = correct && missesOnProblem === 0 && hintIndex < 0
+    const nextStreak = correct ? (courseProgress.currentStreak ?? 0) + 1 : 0
+    const completedSkillIds = masteredThisAttempt
+      ? [...new Set([...courseProgress.completedSkillIds, problem.skillId])]
+      : courseProgress.completedSkillIds
+    const nextTarget = correct && !isLastProblem
+      ? selectAdaptiveTarget({
+        course,
+        currentProblem: problem,
+        outcome: 'correct',
+        misses: missesOnProblem,
+        hintsUsed: hintIndex + 1,
+        streak: nextStreak,
+        completedSkillIds,
+        questionNumber: currentIndex + 2,
+      })
       : null
     const decision = buildAdaptiveDecision({
       correct,
+      mastered: masteredThisAttempt,
       isLastProblem,
       currentSkillName: skill?.name ?? 'this skill',
-      nextSkillName: nextSkill?.name ?? 'the next skill',
+      nextSkillName: nextTarget?.skill.name ?? 'the next skill',
       currentDifficulty: problem.difficulty,
-      nextDifficulty: nextProblem?.difficulty,
+      nextDifficulty: nextTarget?.difficulty,
+      adaptationReason: nextTarget?.reason,
       misses: correct ? missesOnProblem : missesOnProblem + 1,
       hintsUsed: hintIndex + 1,
     })
-    const completedSkillIds = correct
-      ? [...new Set([...courseProgress.completedSkillIds, problem.skillId])]
-      : courseProgress.completedSkillIds
 
     onProgress({
+      ...courseProgress,
       attempts: courseProgress.attempts + 1,
       correct: courseProgress.correct + (correct ? 1 : 0),
       completedSkillIds,
-      nextProblemIndex: correct && !isLastProblem ? currentIndex + 1 : 0,
+      currentStreak: nextStreak,
+      bestStreak: Math.max(courseProgress.bestStreak ?? 0, nextStreak),
+      nextProblemIndex: (seedCursor + 1) % seededProblems.length,
     })
 
     if (correct) {
@@ -170,8 +208,12 @@ function PracticeSession({
         decision,
       })
 
-      if (!isLastProblem) {
-        void prepareNextProblem(currentIndex + 1)
+      if (nextTarget) {
+        void prepareNextProblem(currentIndex + 1, nextTarget, {
+          misses: Math.min(missesOnProblem, 20),
+          hintsUsed: hintIndex + 1,
+          streak: Math.min(nextStreak, 100),
+        })
       }
       return
     }
@@ -190,37 +232,46 @@ function PracticeSession({
     })
   }
 
-  async function prepareNextProblem(nextIndex) {
-    const fallbackProblem = seededProblems[nextIndex]
-    const nextSkill = course.skills.find((item) => item.id === fallbackProblem.skillId)
+  async function prepareNextProblem(nextIndex, target, performance) {
+    const fallbackProblem = createFallbackProblem({
+      seededProblems,
+      target,
+      usedProblems: problems,
+      questionNumber: nextIndex + 1,
+    })
 
     setGenerationState({
       status: 'loading',
-      message: 'Creating a fresh question for your next skill…',
+      message: `Adapting question ${nextIndex + 1} to ${target.skill.name}…`,
     })
 
     try {
       const generatedProblem = await generateQuestion({
         course: { id: course.id, name: course.name, subject: course.subject },
         skill: {
-          id: nextSkill.id,
-          name: nextSkill.name,
-          goal: nextSkill.goal,
+          id: target.skill.id,
+          name: target.skill.name,
+          goal: target.skill.goal,
         },
         answerType: course.answerType,
         promptStyle: course.promptStyle ?? 'standard',
         language: course.language ?? null,
-        difficulty: fallbackProblem.difficulty,
+        difficulty: target.difficulty,
         recentMistakes,
-        avoidPrompts: problems.map((item) => item.prompt),
+        avoidPrompts: problems.map((item) => item.prompt).slice(-12),
+        questionApproach: target.approach,
+        variationSeed: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${nextIndex}`,
+        performance,
       })
 
-      setProblems((currentProblems) => currentProblems.map((item, index) => (
-        index === nextIndex ? generatedProblem : item
-      )))
+      setProblems((currentProblems) => {
+        const nextProblems = [...currentProblems]
+        nextProblems[nextIndex] = generatedProblem
+        return nextProblems
+      })
       setGenerationState({
         status: 'success',
-        message: 'Your next question was generated for this exact skill and level.',
+        message: `Next: ${target.skill.name} at ${target.difficulty.toLowerCase()} level, using a new question style.`,
       })
       onAiStatusChange({
         state: 'connected',
@@ -228,13 +279,87 @@ function PracticeSession({
         message: 'Fresh AI questions are available.',
       })
     } catch {
+      setProblems((currentProblems) => {
+        const nextProblems = [...currentProblems]
+        nextProblems[nextIndex] = fallbackProblem
+        return nextProblems
+      })
       setGenerationState({
         status: 'fallback',
-        message: 'Using a saved question so your practice keeps moving.',
+        message: 'Using a different saved question so your practice keeps moving.',
       })
+      if (fallbackProblem.skillId !== target.skill.id) {
+        const fallbackSkill = course.skills.find((item) => item.id === fallbackProblem.skillId)
+        setResult((currentResult) => currentResult?.decision ? {
+          ...currentResult,
+          decision: {
+            ...currentResult.decision,
+            title: `Continue with ${fallbackSkill?.name ?? 'course review'}`,
+            message: 'A fresh same-skill question was unavailable, so SolvePath chose the least-repeated saved question from this course to keep the session varied.',
+            routeTo: fallbackProblem.difficulty,
+          },
+        } : currentResult)
+      }
       onAiStatusChange({
         state: 'fallback',
         message: 'Saved questions are active.',
+      })
+    }
+  }
+
+  function skipQuestion() {
+    if (result?.correct || result?.skipped || generationState.status === 'loading') {
+      return
+    }
+
+    const nextTarget = !isLastProblem
+      ? selectAdaptiveTarget({
+        course,
+        currentProblem: problem,
+        outcome: 'skipped',
+        misses: missesOnProblem,
+        hintsUsed: hintIndex + 1,
+        streak: 0,
+        completedSkillIds: courseProgress.completedSkillIds,
+        questionNumber: currentIndex + 2,
+      })
+      : null
+    const decision = buildAdaptiveDecision({
+      correct: false,
+      skipped: true,
+      isLastProblem,
+      currentSkillName: skill?.name ?? 'this skill',
+      nextSkillName: nextTarget?.skill.name,
+      currentDifficulty: problem.difficulty,
+      nextDifficulty: nextTarget?.difficulty,
+      adaptationReason: nextTarget?.reason,
+    })
+
+    onProgress({
+      ...courseProgress,
+      skipped: (courseProgress.skipped ?? 0) + 1,
+      currentStreak: 0,
+      nextProblemIndex: (seedCursor + 1) % seededProblems.length,
+    })
+    setSkippedQuestionIndexes((indexes) => [...indexes, currentIndex])
+    setRecentMistakes((mistakes) => [
+      `Skipped ${skill?.name ?? problem.skillId}; use a more supportive example.`,
+      ...mistakes,
+    ].slice(0, 3))
+    setResult({
+      correct: false,
+      skipped: true,
+      title: 'Question skipped',
+      message: `No penalty. Here is the key idea before you move on: ${problem.explanation}`,
+      decision,
+    })
+
+    if (nextTarget) {
+      void prepareNextProblem(currentIndex + 1, nextTarget, {
+        misses: Math.min(missesOnProblem, 20),
+        hintsUsed: hintIndex + 1,
+        streak: 0,
+        skipped: true,
       })
     }
   }
@@ -245,6 +370,12 @@ function PracticeSession({
 
   function moveForward() {
     if (isLastProblem) {
+      const nextSeedCursor = (seedCursor + 1) % seededProblems.length
+      onProgress({
+        ...courseProgress,
+        sessionCount: (courseProgress.sessionCount ?? 0) + 1,
+        nextProblemIndex: nextSeedCursor,
+      })
       setSessionComplete(true)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
@@ -259,19 +390,22 @@ function PracticeSession({
   }
 
   function practiceAgain() {
+    const nextSeedCursor = (seedCursor + 1) % seededProblems.length
+    setSeedCursor(nextSeedCursor)
     setSessionStart({
       attempts: courseProgress.attempts,
       correct: courseProgress.correct,
+      skipped: courseProgress.skipped ?? 0,
       completedSkillIds: [...courseProgress.completedSkillIds],
-      startIndex: 0,
     })
-    setProblems(seededProblems)
+    setProblems([chooseInitialProblem(seededProblems, nextSeedCursor)])
     setCurrentIndex(0)
     setAnswer('')
     setHintIndex(-1)
     setMissesOnProblem(0)
     setResult(null)
     setRecentMistakes([])
+    setSkippedQuestionIndexes([])
     setGenerationState({ status: 'idle', message: '' })
     setSessionComplete(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -319,10 +453,10 @@ function PracticeSession({
               </span>
               <span className="practice-context__skill">{skill?.name}</span>
               <span className={`question-source${problem.source === 'ai' ? ' question-source--ai' : ''}`}>
-                {problem.source === 'ai' ? 'AI generated' : 'Seeded demo'}
+                {problem.source === 'ai' ? 'AI generated' : 'Saved question'}
               </span>
             </div>
-            <span>Question {currentIndex + 1} of {problems.length}</span>
+            <span>Question {currentIndex + 1} of {SESSION_LENGTH}</span>
           </div>
 
           <form
@@ -344,7 +478,7 @@ function PracticeSession({
 
             {answerType === 'multiple-choice' ? (
               <>
-                <fieldset className="choice-list" disabled={result?.correct}>
+                <fieldset className="choice-list" disabled={result?.correct || result?.skipped}>
                   <legend className="answer-label">Select one answer</legend>
                   {problem.choices.map((choice, index) => (
                     <label className="choice-option" key={choice.id}>
@@ -362,7 +496,7 @@ function PracticeSession({
                     </label>
                   ))}
                 </fieldset>
-                {!result?.correct && (
+                {!result?.correct && !result?.skipped && (
                   <button className="primary-button choice-submit" disabled={!answer} type="submit">
                     Check answer
                   </button>
@@ -379,12 +513,12 @@ function PracticeSession({
                     id="practice-answer"
                     inputMode="decimal"
                     autoComplete="off"
-                    disabled={result?.correct}
+                    disabled={result?.correct || result?.skipped}
                     placeholder="Type a number"
                     value={answer}
                     onChange={updateAnswer}
                   />
-                  {!result?.correct && (
+                  {!result?.correct && !result?.skipped && (
                     <button className="primary-button answer-submit" disabled={!answer.trim()} type="submit">
                       Check answer
                     </button>
@@ -405,9 +539,9 @@ function PracticeSession({
             )}
 
             {result && (
-              <div className={`result-card result-card--${result.correct ? 'correct' : 'incorrect'}`} role="status">
+              <div className={`result-card result-card--${result.skipped ? 'skipped' : result.correct ? 'correct' : 'incorrect'}`} role="status">
                 <span className="result-card__icon" aria-hidden="true">
-                  {result.correct ? '✓' : '↻'}
+                  {result.skipped ? '↷' : result.correct ? '✓' : '↻'}
                 </span>
                 <div>
                   <strong>{result.title}</strong>
@@ -451,17 +585,28 @@ function PracticeSession({
             )}
 
             <div className="question-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={hintIndex === problem.hints.length - 1 || result?.correct}
-                onClick={showNextHint}
-              >
-                <span aria-hidden="true">✦</span>
-                {hintIndex < 0 ? 'Give me a hint' : 'Another hint'}
-              </button>
+              <div className="question-support-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={hintIndex === problem.hints.length - 1 || result?.correct || result?.skipped}
+                  onClick={showNextHint}
+                >
+                  <span aria-hidden="true">✦</span>
+                  {hintIndex < 0 ? 'Give me a hint' : 'Another hint'}
+                </button>
+                <button
+                  className="skip-button"
+                  type="button"
+                  disabled={result?.correct || result?.skipped || generationState.status === 'loading'}
+                  onClick={skipQuestion}
+                >
+                  Skip question
+                  <span aria-hidden="true">↷</span>
+                </button>
+              </div>
 
-              {result?.correct && (
+              {(result?.correct || result?.skipped) && (
                 <button
                   className="primary-button"
                   type="button"
@@ -494,35 +639,48 @@ function PracticeSession({
               <span>Attempts</span>
             </div>
             <div>
-              <strong>{courseProgress.correct}</strong>
-              <span>Correct</span>
+              <strong>{courseProgress.currentStreak ?? 0}</strong>
+              <span>Streak</span>
+            </div>
+            <div>
+              <strong>{courseProgress.skipped ?? 0}</strong>
+              <span>Skipped</span>
             </div>
           </div>
 
           <div className="adaptive-note">
             <span className="adaptive-note__mark" aria-hidden="true">↗</span>
             <div>
-              <strong>How this demo adapts</strong>
+              <strong>How this path adapts</strong>
               <p>
-                Correct answers move you forward. Missed answers keep you on the
-                same skill with progressively stronger hints.
+                First-try streaks raise the challenge. Hints, retries, and skips
+                trigger a new approach at a more supportive level.
               </p>
             </div>
           </div>
 
           <ol className="mini-path">
-            {problems.map((item, index) => (
-              <li
-                className={index === currentIndex ? 'mini-path__current' : ''}
-                key={item.id}
-              >
-                <span>{index < currentIndex ? '✓' : index + 1}</span>
-                <div>
-                  <strong>{course.skills.find((courseSkill) => courseSkill.id === item.skillId)?.name}</strong>
-                  <small>{item.difficulty}</small>
-                </div>
-              </li>
-            ))}
+            {Array.from({ length: SESSION_LENGTH }, (_, index) => {
+              const item = problems[index]
+              const wasSkipped = skippedQuestionIndexes.includes(index)
+
+              return (
+                <li
+                  className={`${index === currentIndex ? 'mini-path__current' : ''}${!item ? ' mini-path__future' : ''}`}
+                  key={`session-step-${index}`}
+                >
+                  <span>{index < currentIndex ? (wasSkipped ? '↷' : '✓') : index + 1}</span>
+                  <div>
+                    <strong>
+                      {item
+                        ? course.skills.find((courseSkill) => courseSkill.id === item.skillId)?.name
+                        : 'Adaptive question'}
+                    </strong>
+                    <small>{item?.difficulty ?? 'Chosen from your results'}</small>
+                  </div>
+                </li>
+              )
+            })}
           </ol>
         </aside>
         </main>

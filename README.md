@@ -13,8 +13,17 @@ Math uses numeric evaluation, most subjects use subject-aware multiple choice,
 and programming courses add formatted code tracing and debugging questions.
 Every course has a dependable local session with explanations and progressive
 hints. All nine math courses include five seeded questions—one per mastery
-skill—while the remaining courses use focused three-question demos. Later questions can be generated for the student's
-exact subject, course, skill, language, answer format, and difficulty.
+skill—while the remaining courses keep three dependable saved starting points.
+Every practice run now continues for 10 questions: the opening saved question
+rotates, then each next question is selected from the student's streak, retries,
+hints, and skips. AI questions also rotate through different reasoning styles
+and avoid the previous 12 prompts. If AI is unavailable, varied saved questions
+keep the session moving instead of ending early.
+
+Each course roadmap presents five units as 15 checkpoints—foundation,
+application, and mastery—followed by ongoing mixed review. A learner can skip a
+question without it counting as an incorrect attempt; SolvePath records the
+confidence signal and follows with a more supportive question.
 
 ## Run locally
 
@@ -83,16 +92,19 @@ seeded-fallback contract, so the demo remains usable.
 ## Three-minute demo path
 
 1. Click **Reset demo** so the mastery counters start from zero.
-2. Select **Algebra 1**, point out its five-skill mastery ladder, and start practice.
-3. Enter `5` for the first question to demonstrate feedback that keeps the student
-   on the same skill. Point out the **Why this came next** card, reveal a hint,
-   then answer `6` and show how the learning signal changes the next decision.
-4. Explain that the next question is generated for the next skill when AI is
-   available. If the status changes to **Seeded mode**, continue normally—the
-   saved fallback is the reliability story, not a demo failure.
-5. Finish the five Algebra 1 questions and show the session summary, saved mastery, and
-   **Choose another course** action. The Algebra 1 seeded answers are `6`, `6`,
-   `4`, `2`, and `6` for rehearsal.
+2. Select **Algebra 1** and point out its 15-checkpoint roadmap plus ongoing
+   mixed review, then start practice.
+3. Point out that the opening saved question rotates instead of always starting
+   with the same prompt. The Algebra 1 saved answers are `6`, `6`, `4`, `2`,
+   and `6` in roadmap order for rehearsal.
+4. Answer correctly without a hint and show the **Why this came next** card,
+   live streak, and the 10-question adaptive path. The next question changes
+   skill or difficulty based on that result and uses a different question style.
+5. Use **Skip question** on the next item. Show that it does not reduce accuracy,
+   records a review signal, and prepares a new, more supportive example.
+6. If the status changes to **Seeded mode**, continue normally—the saved
+   fallback is the reliability story, not a demo failure. For the full judge
+   test, question 10 ends with a saved session summary and another rotated run.
 
 For a quick cross-subject moment, choose **Biology** after the summary and show
 that the same mastery engine now renders multiple-choice practice. The seeded

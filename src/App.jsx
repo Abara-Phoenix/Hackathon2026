@@ -5,8 +5,8 @@ import PracticeSession from './components/PracticeSession.jsx'
 import SkillLadder from './components/SkillLadder.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
 import { allCourses, getCourseById } from './data/curriculum.js'
-import { getProblemsForCourse } from './data/demoProblems.js'
 import { getTutorStatus } from './services/tutorApi.js'
+import { SESSION_LENGTH } from './utils/adaptiveSession.js'
 import './App.css'
 
 const SELECTED_COURSE_KEY = 'solvepath:selected-course'
@@ -18,6 +18,10 @@ const SKILL_COUNT = allCourses.reduce((total, course) => total + course.skills.l
 const EMPTY_PROGRESS = {
   attempts: 0,
   correct: 0,
+  skipped: 0,
+  currentStreak: 0,
+  bestStreak: 0,
+  sessionCount: 0,
   completedSkillIds: [],
   nextProblemIndex: 0,
 }
@@ -72,7 +76,6 @@ function App() {
   const mastery = Math.round(
     (selectedProgress.completedSkillIds.length / selectedCourse.skills.length) * 100,
   )
-  const selectedProblemCount = getProblemsForCourse(selectedCourseId).length
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -281,7 +284,7 @@ function App() {
               <h2 id="catalog-title">Where do you want to start?</h2>
             </div>
             <p>
-              Pick a course to see its core skill ladder. Your choice is saved on
+              Pick a course to explore its full adaptive roadmap. Your choice is saved on
               this device.
             </p>
           </div>
@@ -369,7 +372,7 @@ function App() {
                     : selectedCourse.skills[0].goal}
                 </p>
                 <span className="lesson-preview__meta">
-                  {selectedProblemCount} questions · guided hints · saved locally
+                  {SESSION_LENGTH}-question adaptive session · guided hints · saved locally
                 </span>
               </div>
             </aside>

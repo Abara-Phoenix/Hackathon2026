@@ -17,7 +17,7 @@ function CourseCard({ course, isSelected, onSelect }) {
       <span className="course-card__name">{course.name}</span>
       <span className="course-card__summary">{course.summary}</span>
       <span className="course-card__footer">
-        <span>{course.skills.length} core skills</span>
+        <span>{course.skills.length} units · {course.skills.length * 3} checkpoints</span>
         <span>{isSelected ? 'Selected' : 'View path'}</span>
       </span>
     </button>

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   formatGeneratedQuestion,
+  isPromptTooSimilar,
   QuestionRequestSchema,
 } from '../server/questionGenerator.js'
 
@@ -123,4 +124,32 @@ test('generated Biology choices must be unique', () => {
       explanation: 'The correct choice follows from the lesson concept.',
     },
   ), /duplicate answer choices/)
+})
+
+test('generation rejects repeated templates even when only the numbers change', () => {
+  assert.equal(
+    isPromptTooSimilar('Solve for x: 5(x - 4) = 20.', ['Solve for x: 3(x - 2) = 12.']),
+    true,
+  )
+  assert.equal(
+    isPromptTooSimilar(
+      'A graph crosses the x-axis twice. How many real zeros does the function have?',
+      ['Solve for x: 3(x - 2) = 12.'],
+    ),
+    false,
+  )
+})
+
+test('generation accepts a longer recent-prompt history and adaptive context', () => {
+  const result = QuestionRequestSchema.safeParse({
+    ...baseRequest,
+    course: { id: 'algebra-1', name: 'Algebra 1', subject: 'Math' },
+    answerType: 'numeric',
+    avoidPrompts: Array.from({ length: 12 }, (_, index) => `Previous prompt ${index}`),
+    questionApproach: 'a realistic scenario that requires modeling',
+    variationSeed: 'session-4-question-7',
+    performance: { misses: 1, hintsUsed: 1, streak: 0 },
+  })
+
+  assert.equal(result.success, true)
 })
