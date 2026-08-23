@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  generateMathQuestion,
+  generateQuestion,
   getConfiguredModel,
   isAiConfigured,
   QuestionRequestSchema,
@@ -39,7 +39,7 @@ app.post('/api/questions/generate', async (request, response) => {
   }
 
   try {
-    const question = await generateMathQuestion(parsedRequest.data)
+    const question = await generateQuestion(parsedRequest.data)
     response.json({ question })
   } catch (error) {
     if (error.code === 'AI_NOT_CONFIGURED') {

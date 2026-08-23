@@ -36,3 +36,13 @@ export function isAnswerCorrect(rawAnswer, expectedAnswer, tolerance = 0.01) {
   const parsedAnswer = parseNumericAnswer(rawAnswer)
   return parsedAnswer !== null && Math.abs(parsedAnswer - expectedAnswer) <= tolerance
 }
+
+export function isPracticeAnswerCorrect(rawAnswer, problem, fallbackAnswerType = 'numeric') {
+  const answerType = problem.answerType ?? fallbackAnswerType
+
+  if (answerType === 'multiple-choice') {
+    return typeof rawAnswer === 'string' && rawAnswer === problem.answer
+  }
+
+  return isAnswerCorrect(rawAnswer, problem.answer, problem.tolerance)
+}

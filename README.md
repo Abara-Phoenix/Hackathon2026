@@ -1,9 +1,19 @@
 # SolvePath
 
-SolvePath is a hackathon-ready adaptive math practice app covering Algebra 1
-through Calculus 2. The first question loads instantly from a local problem
-bank, while later questions can be generated for the student's exact course,
-skill, and difficulty.
+SolvePath is a hackathon-ready adaptive practice app with **48 courses across
+10 subject families and 240 mastery skills**. The catalog includes foundational
+through advanced math; eight lab and applied sciences; history, civics,
+economics, geography, psychology, sociology, and philosophy; general and AP
+English; Spanish, French, Mandarin, and ASL; visual art and music; personal
+finance, business, health, and career readiness; SAT and ACT preparation; and
+six computer-science paths including Python, AP Computer Science A in Java, AP
+Computer Science Principles, web development, cybersecurity, and data science.
+
+Math uses numeric evaluation, most subjects use subject-aware multiple choice,
+and programming courses add formatted code tracing and debugging questions.
+Every course has a dependable three-question local session with explanations
+and progressive hints. Later questions can be generated for the student's
+exact subject, course, skill, language, answer format, and difficulty.
 
 ## Run locally
 
@@ -55,10 +65,25 @@ response.
 1. Click **Reset demo** so the mastery counters start from zero.
 2. Select **Algebra 1**, point out its five-skill mastery ladder, and start practice.
 3. Enter `5` for the first question to demonstrate feedback that keeps the student
-   on the same skill. Reveal a hint, then answer `6`.
+   on the same skill. Point out the **Why this came next** card, reveal a hint,
+   then answer `6` and show how the learning signal changes the next decision.
 4. Explain that the next question is generated for the next skill when AI is
    available. If the status changes to **Seeded mode**, continue normally—the
    saved fallback is the reliability story, not a demo failure.
 5. Finish the three questions and show the session summary, saved mastery, and
    **Choose another course** action. The Algebra 1 seeded answers are `6`, `6`,
    and `4` for rehearsal.
+
+For a quick cross-subject moment, choose **Biology** after the summary and show
+that the same mastery engine now renders multiple-choice practice. The seeded
+answers are **Mitochondrion**, **50%**, and **Water is split during the
+light-dependent reactions**.
+
+Use the **Computer Science** filter to demonstrate **Python Foundations**. Its
+seeded answers are **11**, **cool**, and **total += number**. These questions
+show output prediction and debugging without executing arbitrary student code.
+
+For a recognizable AP course, choose **AP Computer Science A — Java**. Its
+seeded answers are **6**, **6**, and **To encapsulate the field and control
+outside access**. The same practice engine renders Java code safely as text and
+adapts the next skill without executing student code.

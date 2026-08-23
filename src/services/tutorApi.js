@@ -1,13 +1,34 @@
 function isGeneratedQuestion(question) {
-  return (
+  const hasCommonFields = (
     question &&
     typeof question.id === 'string' &&
     typeof question.prompt === 'string' &&
-    typeof question.answer === 'number' &&
-    typeof question.tolerance === 'number' &&
     Array.isArray(question.hints) &&
     question.hints.length === 2 &&
     typeof question.explanation === 'string'
+  )
+
+  if (!hasCommonFields) {
+    return false
+  }
+
+  if (question.answerType === 'multiple-choice') {
+    return (
+      typeof question.answer === 'string' &&
+      Array.isArray(question.choices) &&
+      question.choices.length === 4 &&
+      (question.codeSnippet == null || typeof question.codeSnippet === 'string') &&
+      question.choices.every((choice) => (
+        typeof choice.id === 'string' && typeof choice.label === 'string'
+      )) &&
+      question.choices.some((choice) => choice.id === question.answer)
+    )
+  }
+
+  return (
+    question.answerType === 'numeric' &&
+    typeof question.answer === 'number' &&
+    typeof question.tolerance === 'number'
   )
 }
 

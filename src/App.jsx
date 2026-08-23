@@ -3,12 +3,15 @@ import AiStatusBadge from './components/AiStatusBadge.jsx'
 import CourseCard from './components/CourseCard.jsx'
 import PracticeSession from './components/PracticeSession.jsx'
 import SkillLadder from './components/SkillLadder.jsx'
-import { getCourseById, mathCourses } from './data/mathCurriculum.js'
+import { allCourses, getCourseById } from './data/curriculum.js'
 import { getTutorStatus } from './services/tutorApi.js'
 import './App.css'
 
 const SELECTED_COURSE_KEY = 'solvepath:selected-course'
 const PROGRESS_KEY = 'solvepath:progress:v1'
+const SUBJECT_FILTERS = ['All', ...new Set(allCourses.map((course) => course.subject))]
+const SUBJECT_COUNT = new Set(allCourses.map((course) => course.subject)).size
+const SKILL_COUNT = allCourses.reduce((total, course) => total + course.skills.length, 0)
 const EMPTY_PROGRESS = {
   attempts: 0,
   correct: 0,
@@ -21,7 +24,7 @@ function getInitialCourseId() {
     const savedCourseId = window.localStorage.getItem(SELECTED_COURSE_KEY)
     return getCourseById(savedCourseId).id
   } catch {
-    return mathCourses[0].id
+    return allCourses[0].id
   }
 }
 
@@ -38,9 +41,13 @@ function App() {
   const [selectedCourseId, setSelectedCourseId] = useState(getInitialCourseId)
   const [progressByCourse, setProgressByCourse] = useState(getInitialProgress)
   const [isPracticing, setIsPracticing] = useState(false)
+  const [subjectFilter, setSubjectFilter] = useState('All')
   const [aiStatus, setAiStatus] = useState({ state: 'checking', message: 'Checking AI availability.' })
   const [resetComplete, setResetComplete] = useState(false)
   const selectedCourse = getCourseById(selectedCourseId)
+  const visibleCourses = subjectFilter === 'All'
+    ? allCourses
+    : allCourses.filter((course) => course.subject === subjectFilter)
   const selectedProgress = {
     ...EMPTY_PROGRESS,
     ...progressByCourse[selectedCourseId],
@@ -89,6 +96,17 @@ function App() {
     })
   }
 
+  function selectSubject(subject) {
+    setSubjectFilter(subject)
+
+    if (subject !== 'All' && selectedCourse.subject !== subject) {
+      const firstCourseInSubject = allCourses.find((course) => course.subject === subject)
+      if (firstCourseInSubject) {
+        selectCourse(firstCourseInSubject.id)
+      }
+    }
+  }
+
   function updateCourseProgress(nextProgress) {
     setProgressByCourse((currentProgress) => ({
       ...currentProgress,
@@ -113,8 +131,9 @@ function App() {
 
   function resetDemo() {
     setProgressByCourse({})
-    setSelectedCourseId(mathCourses[0].id)
+    setSelectedCourseId(allCourses[0].id)
     setIsPracticing(false)
+    setSubjectFilter('All')
     setResetComplete(true)
 
     try {
@@ -165,14 +184,14 @@ function App() {
       <main id="top">
         <section className="hero-section" aria-labelledby="hero-title">
           <div className="hero-section__copy">
-            <p className="eyebrow">Math that meets you where you are</p>
+            <p className="eyebrow">Every subject. One adaptive path.</p>
             <h1 id="hero-title">
               Practice smarter.
               <span> Master every step.</span>
             </h1>
             <p className="hero-section__lede">
-              Personalized math practice from Algebra 1 through Calculus 2,
-              adapting after every answer.
+              Personalized practice across math, science, humanities, languages,
+              and coding—adapting after every answer.
             </p>
             <div className="hero-section__actions">
               <button className="primary-button" type="button" onClick={scrollToCourses}>
@@ -210,9 +229,9 @@ function App() {
         </section>
 
         <section className="quick-stats" aria-label="SolvePath coverage">
-          <div><strong>6</strong><span>math courses</span></div>
-          <div><strong>30</strong><span>core skills</span></div>
-          <div><strong>3</strong><span>adaptive levels</span></div>
+          <div><strong>{allCourses.length}</strong><span>courses</span></div>
+          <div><strong>{SUBJECT_COUNT}</strong><span>subjects</span></div>
+          <div><strong>{SKILL_COUNT}</strong><span>core skills</span></div>
         </section>
 
         <section className="catalog-section" id="course-catalog" aria-labelledby="catalog-title">
@@ -227,9 +246,30 @@ function App() {
             </p>
           </div>
 
+          <div className="subject-filters" role="group" aria-label="Filter courses by subject">
+            {SUBJECT_FILTERS.map((subject) => {
+              const courseCount = subject === 'All'
+                ? allCourses.length
+                : allCourses.filter((course) => course.subject === subject).length
+
+              return (
+                <button
+                  className={subject === subjectFilter ? 'subject-filter subject-filter--active' : 'subject-filter'}
+                  type="button"
+                  aria-pressed={subject === subjectFilter}
+                  key={subject}
+                  onClick={() => selectSubject(subject)}
+                >
+                  {subject}
+                  <span>{courseCount}</span>
+                </button>
+              )
+            })}
+          </div>
+
           <div className="catalog-layout">
-            <div className="course-grid">
-              {mathCourses.map((course) => (
+            <div className={`course-grid${visibleCourses.length === 1 ? ' course-grid--single' : ''}`}>
+              {visibleCourses.map((course) => (
                 <CourseCard
                   course={course}
                   isSelected={course.id === selectedCourseId}
@@ -245,7 +285,7 @@ function App() {
               aria-live="polite"
             >
               <div className="path-panel__heading">
-                <span className="path-panel__kicker">Selected path</span>
+                <span className="path-panel__kicker">{selectedCourse.subject} path</span>
                 <h3>{selectedCourse.name}</h3>
                 <p>{selectedCourse.summary}</p>
                 <div className="path-panel__mastery">

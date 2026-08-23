@@ -2,7 +2,8 @@ import { useState } from 'react'
 import AiStatusBadge from './AiStatusBadge.jsx'
 import { getProblemsForCourse } from '../data/demoProblems.js'
 import { generateQuestion } from '../services/tutorApi.js'
-import { isAnswerCorrect } from '../utils/answerChecking.js'
+import { buildAdaptiveDecision } from '../utils/adaptiveDecision.js'
+import { isPracticeAnswerCorrect } from '../utils/answerChecking.js'
 
 function masteryFor(course, completedSkillIds = []) {
   return Math.round((completedSkillIds.length / course.skills.length) * 100)
@@ -108,6 +109,7 @@ function PracticeSession({
   const [hintIndex, setHintIndex] = useState(-1)
   const [result, setResult] = useState(null)
   const [recentMistakes, setRecentMistakes] = useState([])
+  const [missesOnProblem, setMissesOnProblem] = useState(0)
   const [generationState, setGenerationState] = useState({ status: 'idle', message: '' })
   const [sessionComplete, setSessionComplete] = useState(false)
   const [sessionStart, setSessionStart] = useState(() => ({
@@ -119,6 +121,7 @@ function PracticeSession({
 
   const problem = problems[currentIndex]
   const skill = course.skills.find((item) => item.id === problem.skillId)
+  const answerType = problem.answerType ?? course.answerType ?? 'numeric'
   const mastery = masteryFor(course, courseProgress.completedSkillIds)
   const isLastProblem = currentIndex === problems.length - 1
 
@@ -129,7 +132,21 @@ function PracticeSession({
       return
     }
 
-    const correct = isAnswerCorrect(answer, problem.answer, problem.tolerance)
+    const correct = isPracticeAnswerCorrect(answer, problem, course.answerType)
+    const nextProblem = isLastProblem ? null : problems[currentIndex + 1]
+    const nextSkill = nextProblem
+      ? course.skills.find((item) => item.id === nextProblem.skillId)
+      : null
+    const decision = buildAdaptiveDecision({
+      correct,
+      isLastProblem,
+      currentSkillName: skill?.name ?? 'this skill',
+      nextSkillName: nextSkill?.name ?? 'the next skill',
+      currentDifficulty: problem.difficulty,
+      nextDifficulty: nextProblem?.difficulty,
+      misses: correct ? missesOnProblem : missesOnProblem + 1,
+      hintsUsed: hintIndex + 1,
+    })
     const completedSkillIds = correct
       ? [...new Set([...courseProgress.completedSkillIds, problem.skillId])]
       : courseProgress.completedSkillIds
@@ -146,9 +163,7 @@ function PracticeSession({
         correct: true,
         title: 'That’s right',
         message: problem.explanation,
-        adaptation: isLastProblem
-          ? 'Demo set complete. Your progress is saved for the next visit.'
-          : `Mastery updated. The next question moves to ${problems[currentIndex + 1].difficulty.toLowerCase()} difficulty.`,
+        decision,
       })
 
       if (!isLastProblem) {
@@ -161,12 +176,13 @@ function PracticeSession({
       `Needed another attempt on ${skill?.name ?? problem.skillId}.`,
       ...mistakes,
     ].slice(0, 3))
+    setMissesOnProblem((misses) => misses + 1)
 
     setResult({
       correct: false,
       title: 'Not quite yet',
       message: 'That answer does not match. Check your work or reveal a hint before trying again.',
-      adaptation: 'You’ll stay on this skill until the idea feels solid.',
+      decision,
     })
   }
 
@@ -181,12 +197,15 @@ function PracticeSession({
 
     try {
       const generatedProblem = await generateQuestion({
-        course: { id: course.id, name: course.name },
+        course: { id: course.id, name: course.name, subject: course.subject },
         skill: {
           id: nextSkill.id,
           name: nextSkill.name,
           goal: nextSkill.goal,
         },
+        answerType: course.answerType,
+        promptStyle: course.promptStyle ?? 'standard',
+        language: course.language ?? null,
         difficulty: fallbackProblem.difficulty,
         recentMistakes,
         avoidPrompts: problems.map((item) => item.prompt),
@@ -230,6 +249,7 @@ function PracticeSession({
     setCurrentIndex((index) => index + 1)
     setAnswer('')
     setHintIndex(-1)
+    setMissesOnProblem(0)
     setResult(null)
     setGenerationState({ status: 'idle', message: '' })
   }
@@ -245,6 +265,7 @@ function PracticeSession({
     setCurrentIndex(0)
     setAnswer('')
     setHintIndex(-1)
+    setMissesOnProblem(0)
     setResult(null)
     setRecentMistakes([])
     setGenerationState({ status: 'idle', message: '' })
@@ -299,30 +320,72 @@ function PracticeSession({
             <span>Question {currentIndex + 1} of {problems.length}</span>
           </div>
 
-          <form className="question-card" onSubmit={submitAnswer}>
-            <p className="question-card__eyebrow">Solve the problem</p>
+          <form
+            className={`question-card${answerType === 'multiple-choice' ? ' question-card--choice' : ''}${problem.codeSnippet ? ' question-card--code' : ''}`}
+            onSubmit={submitAnswer}
+          >
+            <p className="question-card__eyebrow">
+              {answerType === 'multiple-choice' ? 'Choose the best answer' : 'Solve the problem'}
+            </p>
             <h1 id="practice-question">{problem.prompt}</h1>
 
-            <label className="answer-label" htmlFor="practice-answer">
-              Your answer
-            </label>
-            <div className="answer-row">
-              <input
-                id="practice-answer"
-                inputMode="decimal"
-                autoComplete="off"
-                disabled={result?.correct}
-                placeholder="Type a number"
-                value={answer}
-                onChange={updateAnswer}
-              />
-              {!result?.correct && (
-                <button className="primary-button answer-submit" disabled={!answer.trim()} type="submit">
-                  Check answer
-                </button>
-              )}
-            </div>
-            <p className="answer-help">You can enter a number, fraction, or an answer like x = 6.</p>
+            {problem.codeSnippet && (
+              <pre className="code-question" aria-label={`${course.language ?? 'Code'} for this question`}>
+                <code>{problem.codeSnippet}</code>
+              </pre>
+            )}
+
+            {answerType === 'multiple-choice' ? (
+              <>
+                <fieldset className="choice-list" disabled={result?.correct}>
+                  <legend className="answer-label">Select one answer</legend>
+                  {problem.choices.map((choice, index) => (
+                    <label className="choice-option" key={choice.id}>
+                      <input
+                        checked={answer === choice.id}
+                        name="practice-answer"
+                        type="radio"
+                        value={choice.id}
+                        onChange={updateAnswer}
+                      />
+                      <span className="choice-option__letter" aria-hidden="true">
+                        {String.fromCharCode(65 + index)}
+                      </span>
+                      <span>{choice.label}</span>
+                    </label>
+                  ))}
+                </fieldset>
+                {!result?.correct && (
+                  <button className="primary-button choice-submit" disabled={!answer} type="submit">
+                    Check answer
+                  </button>
+                )}
+                <p className="answer-help">Choose the response that best matches the concept.</p>
+              </>
+            ) : (
+              <>
+                <label className="answer-label" htmlFor="practice-answer">
+                  Your answer
+                </label>
+                <div className="answer-row">
+                  <input
+                    id="practice-answer"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    disabled={result?.correct}
+                    placeholder="Type a number"
+                    value={answer}
+                    onChange={updateAnswer}
+                  />
+                  {!result?.correct && (
+                    <button className="primary-button answer-submit" disabled={!answer.trim()} type="submit">
+                      Check answer
+                    </button>
+                  )}
+                </div>
+                <p className="answer-help">You can enter a number, fraction, or an answer like x = 6.</p>
+              </>
+            )}
 
             {hintIndex >= 0 && (
               <div className="hint-card" role="status">
@@ -342,9 +405,33 @@ function PracticeSession({
                 <div>
                   <strong>{result.title}</strong>
                   <p>{result.message}</p>
-                  <span>{result.adaptation}</span>
                 </div>
               </div>
+            )}
+
+            {result?.decision && (
+              <section
+                className={`adaptive-decision adaptive-decision--${result.decision.tone}`}
+                aria-labelledby="adaptive-decision-title"
+              >
+                <header className="adaptive-decision__header">
+                  <span className="adaptive-decision__icon" aria-hidden="true">↗</span>
+                  <div>
+                    <span>Why this came next</span>
+                    <h2 id="adaptive-decision-title">{result.decision.title}</h2>
+                  </div>
+                </header>
+                <div className="adaptive-decision__signal">
+                  <span>Learning signal</span>
+                  <strong>{result.decision.evidence}</strong>
+                </div>
+                <p>{result.decision.message}</p>
+                <div className="adaptive-decision__route" aria-label={`Path from ${result.decision.routeFrom} to ${result.decision.routeTo}`}>
+                  <span>{result.decision.routeFrom}</span>
+                  <strong aria-hidden="true">→</strong>
+                  <span>{result.decision.routeTo}</span>
+                </div>
+              </section>
             )}
 
             {generationState.status !== 'idle' && (

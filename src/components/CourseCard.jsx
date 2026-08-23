@@ -8,7 +8,10 @@ function CourseCard({ course, isSelected, onSelect }) {
       onClick={() => onSelect(course.id)}
     >
       <span className="course-card__topline">
-        <span className="course-card__level">{course.level}</span>
+        <span className="course-card__labels">
+          <span className="course-card__subject">{course.subject}</span>
+          <span className="course-card__level">{course.level}</span>
+        </span>
         <span className="course-card__arrow" aria-hidden="true">→</span>
       </span>
       <span className="course-card__name">{course.name}</span>

@@ -85,7 +85,11 @@ export const mathCourses = [
       skill('parametric-and-polar', 'Parametric and polar functions', 'Analyze curves using alternative coordinates.'),
     ],
   },
-]
+].map((course) => ({
+  ...course,
+  subject: 'Math',
+  answerType: 'numeric',
+}))
 
 export function getCourseById(courseId) {
   return mathCourses.find((course) => course.id === courseId) ?? mathCourses[0]

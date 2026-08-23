@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isAnswerCorrect, parseNumericAnswer } from '../src/utils/answerChecking.js'
+import {
+  isAnswerCorrect,
+  isPracticeAnswerCorrect,
+  parseNumericAnswer,
+} from '../src/utils/answerChecking.js'
 
 test('parseNumericAnswer accepts the formats used by the practice UI', () => {
   assert.equal(parseNumericAnswer('x = 6'), 6)
@@ -24,4 +28,15 @@ test('isAnswerCorrect respects exact values and generated-question tolerance', (
   assert.equal(isAnswerCorrect('3.141', 3.14, 0.002), true)
   assert.equal(isAnswerCorrect('3.15', 3.14, 0.002), false)
   assert.equal(isAnswerCorrect('nope', 6), false)
+})
+
+test('isPracticeAnswerCorrect supports multiple-choice questions', () => {
+  const problem = {
+    answerType: 'multiple-choice',
+    answer: 'mitochondrion',
+  }
+
+  assert.equal(isPracticeAnswerCorrect('mitochondrion', problem), true)
+  assert.equal(isPracticeAnswerCorrect('nucleus', problem), false)
+  assert.equal(isPracticeAnswerCorrect('', problem), false)
 })
